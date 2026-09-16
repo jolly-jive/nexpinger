@@ -1,0 +1,18 @@
+# --- Elixir (GitHub official) ---
+/_build/ 
+/cover/ 
+/deps/ 
+/doc/ 
+/.fetch 
+erl_crash.dump 
+*.ez 
+*.beam 
+/config/*.secret.exs 
+.elixir_ls/ 
+
+# --- VSCode (GitHub official) ---
+.vscode/
+
+# --- other editors ---
+*.swp           # Vim/エディタの一時ファイル 
+*~              # バックアップファイル 
