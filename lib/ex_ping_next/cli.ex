@@ -1,16 +1,50 @@
 defmodule ExPingNext.CLI do
   @moduledoc """
   escript のエントリポイント。
-  使い方: exping_next [設定ファイルパス]  (省略時は config/hosts.yml)
+  使い方: exping_next [--log-file PATH] [--no-stdout] [--help] [設定ファイルパス]
   """
 
   alias ExPingNext.{Config, Runner}
 
+  @usage """
+  Usage: exping_next [options] [config file]
+
+    --log-file PATH     write monitoring results to a log file
+    --no-stdout         disable console output
+    --help              show this help message
+
+  Default config: config/hosts.yml
+  Default log file: monitor.log
+  """
+
   @spec default_config_path() :: String.t()
   def default_config_path, do: "config/hosts.yml"
 
+  @spec default_log_file() :: String.t()
+  def default_log_file, do: "monitor.log"
+
+  @spec parse_options([String.t()]) :: {[log_file: String.t()], [String.t()], [String.t()]}
+  def parse_options(argv) do
+    OptionParser.parse(argv,
+      strict: [
+        log_file: :string,
+        no_stdout: :boolean,
+        help: :boolean
+      ]
+    )
+  end
+
   def main(argv) do
-    path = List.first(argv) || default_config_path()
+    {opts, args, _invalid} = parse_options(argv)
+
+    if Keyword.get(opts, :help, false) do
+      IO.puts(@usage)
+      System.halt(0)
+    end
+
+    log_file = Keyword.get(opts, :log_file, default_log_file())
+    stdout_enabled = not Keyword.get(opts, :no_stdout, false)
+    path = List.first(args) || default_config_path()
 
     case Config.load(path) do
       {:ok, []} ->
@@ -19,7 +53,15 @@ defmodule ExPingNext.CLI do
 
       {:ok, hosts} ->
         IO.puts("ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台を監視します (#{path})")
+        IO.puts("ログ出力: #{log_file}")
+        IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
         IO.puts(String.duplicate("-", 60))
+
+        start_log_file_subscriber(log_file)
+
+        if stdout_enabled do
+          ExPingNext.Broadcaster.subscribe(ExPingNext.ConsoleSubscriber)
+        end
 
         Enum.each(hosts, fn host ->
           case DynamicSupervisor.start_child(ExPingNext.MonitorSupervisor, {Runner, host}) do
@@ -34,6 +76,17 @@ defmodule ExPingNext.CLI do
       {:error, reason} ->
         IO.puts(:stderr, "設定ファイルの読み込みに失敗しました: #{inspect(reason)}")
         System.halt(1)
+    end
+  end
+
+  defp start_log_file_subscriber(log_file) do
+    case Process.whereis(:log_file_subscriber) do
+      nil ->
+        ExPingNext.FileSubscriber.start_link(log_file, :log_file_subscriber)
+        ExPingNext.Broadcaster.subscribe(:log_file_subscriber)
+
+      _pid ->
+        :ok
     end
   end
 end

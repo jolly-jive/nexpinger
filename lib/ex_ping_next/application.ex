@@ -17,8 +17,6 @@ defmodule ExPingNext.Application do
     {:ok, supervisor} =
       Supervisor.start_link(children, strategy: :one_for_one, name: ExPingNext.Supervisor)
 
-    ExPingNext.Broadcaster.subscribe(ExPingNext.ConsoleSubscriber)
-
     {:ok, supervisor}
   end
 end

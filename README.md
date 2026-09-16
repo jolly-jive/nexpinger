@@ -9,6 +9,9 @@ ExPing 後継プロジェクトの Elixir 実装。まずは CUI 版（1行1項�
 - ICMP Ping（OSの `ping` コマンドを実行、特権不要）
 - TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測）
 - 1行1項目のストリーム出力（成功=緑 OK / 失敗=赤 NG）
+- 監視結果を stdout とログファイルの両方へ出力可能
+- `--no-stdout` でコンソール表示を無効化可能
+- `--help` でヘルプを表示可能
 
 ## セットアップ
 
@@ -24,12 +27,38 @@ mix deps.get
 mix run --no-halt -e 'ExPingNext.CLI.main(["config/hosts.yml"])'
 ```
 
+### 1a. オプション付きで実行
+
+```bash
+mix run --no-halt -e 'ExPingNext.CLI.main(["--log-file", "/tmp/exping.log", "config/hosts.yml"])'
+mix run --no-halt -e 'ExPingNext.CLI.main(["--no-stdout", "--log-file", "/tmp/exping.log", "config/hosts.yml"])'
+mix run --no-halt -e 'ExPingNext.CLI.main(["--help"])'
+```
+
 ### 2. escriptとしてビルドして実行
 
 ```bash
 mix escript.build
 ./exping_next config/hosts.yml
+./exping_next --log-file /tmp/exping.log config/hosts.yml
+./exping_next --no-stdout --log-file /tmp/exping.log config/hosts.yml
+./exping_next --help
 ```
+
+## CLI オプション
+
+- `--log-file PATH`: 監視結果を指定したファイルへ追記
+- `--no-stdout`: コンソールへの出力を抑止
+- `--help`: ヘルプを表示
+- `config file`: 監視設定ファイルのパス（省略時は `config/hosts.yml`）
+
+例:
+
+```bash
+./exping_next --log-file ./monitor.log --no-stdout
+```
+
+この場合、ファイルへ記録される一方で標準出力には結果が表示されません。
 
 ## 設定ファイル (`config/hosts.yml`)
 
@@ -60,6 +89,8 @@ hosts:
 2026-09-16 12:00:01.456 | web-service     (example.com    ) TCP  OK   45.67 ms
 2026-09-16 12:00:02.789 | dns-server      (192.168.1.10   ) ICMP NG    timeout
 ```
+
+ログファイルへは同じ形式で追記されます。`--no-stdout` を付けると、コンソール側には出力されず、ファイルのみに残ります。
 
 ## 今後実装したい項目（未着手）
 

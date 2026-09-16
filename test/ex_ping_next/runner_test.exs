@@ -1,5 +1,5 @@
 defmodule ExPingNext.RunnerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias ExPingNext.{Broadcaster, Host, Runner}
 
@@ -86,5 +86,28 @@ defmodule ExPingNext.RunnerTest do
     assert_receive {:host_result, %Host{name: "immediate-check"}, {:ok, _rtt}}, 1000
 
     Process.exit(pid, :kill)
+  end
+
+  test "publishes to stdout and file subscribers at the same time" do
+    host = %Host{
+      name: "dual-output",
+      address: "127.0.0.1",
+      type: :icmp,
+      interval: 10,
+      timeout: 100
+    }
+
+    path = "/tmp/ex_ping_next_dual_output.log"
+    File.rm(path)
+
+    {:ok, _pid} = ExPingNext.FileSubscriber.start_link(path, :test_file_subscriber, self())
+    assert :ok = Broadcaster.subscribe(self())
+    assert :ok = Broadcaster.subscribe(:test_file_subscriber)
+    assert :ok = Broadcaster.publish(host, {:ok, 99.99})
+
+    assert_receive {:host_result, ^host, {:ok, 99.99}}
+    assert_receive {:file_written, ^path}
+    assert {:ok, content} = File.read(path)
+    assert String.contains?(content, "dual-output")
   end
 end
