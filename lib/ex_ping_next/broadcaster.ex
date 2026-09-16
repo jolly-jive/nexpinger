@@ -94,7 +94,7 @@ defmodule ExPingNext.ConsoleSubscriber do
     {:noreply, state}
   end
 
-  defp format_label(%Host{name: name, address: address, type: type}) do
+  defp format_label(%Host{name: name, address: address, type: type} = host) do
     type_str = type |> Atom.to_string() |> String.upcase() |> String.pad_trailing(4)
 
     [
@@ -102,10 +102,14 @@ defmodule ExPingNext.ConsoleSubscriber do
       "(",
       String.pad_trailing(address, 15),
       ") ",
+      mac_label(host),
       type_str,
       " "
     ]
   end
+
+  defp mac_label(%Host{mac_address: nil}), do: String.duplicate(" ", 18)
+  defp mac_label(%Host{mac_address: mac}), do: mac <> " "
 
   defp status_tag(:ok), do: IO.ANSI.green() <> "OK " <> IO.ANSI.reset()
   defp status_tag(:ng), do: IO.ANSI.red() <> "NG " <> IO.ANSI.reset()
@@ -161,7 +165,7 @@ defmodule ExPingNext.FileSubscriber do
   defp notify_owner(nil, _message), do: :ok
   defp notify_owner(owner, message), do: send(owner, message)
 
-  defp format_label(%Host{name: name, address: address, type: type}) do
+  defp format_label(%Host{name: name, address: address, type: type} = host) do
     type_str = type |> Atom.to_string() |> String.upcase() |> String.pad_trailing(4)
 
     [
@@ -169,10 +173,14 @@ defmodule ExPingNext.FileSubscriber do
       "(",
       String.pad_trailing(address, 15),
       ") ",
+      mac_label(host),
       type_str,
       " "
     ]
   end
+
+  defp mac_label(%Host{mac_address: nil}), do: String.duplicate(" ", 18)
+  defp mac_label(%Host{mac_address: mac}), do: mac <> " "
 
   defp status_tag(:ok), do: "OK "
   defp status_tag(:ng), do: "NG "

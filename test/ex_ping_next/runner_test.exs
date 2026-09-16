@@ -110,4 +110,31 @@ defmodule ExPingNext.RunnerTest do
     assert {:ok, content} = File.read(path)
     assert String.contains?(content, "dual-output")
   end
+
+  test "keeps the result columns aligned when a MAC address is unavailable" do
+    with_mac = %Host{
+      name: "with-mac",
+      address: "192.168.0.1",
+      type: :icmp,
+      mac_address: "08:33:ed:8f:c1:f2"
+    }
+
+    without_mac = %{with_mac | name: "without-mac", mac_address: nil}
+    mac_path = "/tmp/ex_ping_next_with_mac.log"
+    no_mac_path = "/tmp/ex_ping_next_without_mac.log"
+    File.rm(mac_path)
+    File.rm(no_mac_path)
+
+    {:ok, mac_pid} = ExPingNext.FileSubscriber.start_link(mac_path, nil, self())
+    {:ok, no_mac_pid} = ExPingNext.FileSubscriber.start_link(no_mac_path, nil, self())
+    send(mac_pid, {:host_result, with_mac, {:ok, 1.23}})
+    send(no_mac_pid, {:host_result, without_mac, {:ok, 1.23}})
+
+    assert_receive {:file_written, ^mac_path}
+    assert_receive {:file_written, ^no_mac_path}
+    {:ok, mac_line} = File.read(mac_path)
+    {:ok, no_mac_line} = File.read(no_mac_path)
+    assert mac_line =~ ") 08:33:ed:8f:c1:f2 ICMP"
+    assert no_mac_line =~ ")                   ICMP"
+  end
 end

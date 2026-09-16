@@ -6,7 +6,7 @@ defmodule ExPingNext.Runner do
 
   use GenServer
 
-  alias ExPingNext.{Broadcaster, Host, Prober}
+  alias ExPingNext.{Broadcaster, Host, MacResolver, Prober}
 
   @type state :: %{
           host: Host.t(),
@@ -32,7 +32,8 @@ defmodule ExPingNext.Runner do
   @impl true
   def handle_info(:probe, %{host: host} = state) do
     result = Prober.probe(host)
-    Broadcaster.publish(host, result)
+    host_with_mac = %{host | mac_address: MacResolver.lookup(host.address)}
+    Broadcaster.publish(host_with_mac, result)
     schedule_next(state.interval)
     {:noreply, state}
   end

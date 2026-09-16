@@ -9,7 +9,8 @@ defmodule ExPingNext.Host do
             type: :icmp,
             port: nil,
             interval: 1000,
-            timeout: 1000
+            timeout: 1000,
+            mac_address: nil
 
   @type t :: %__MODULE__{
           name: String.t(),
@@ -17,6 +18,7 @@ defmodule ExPingNext.Host do
           type: :icmp | :tcp,
           port: non_neg_integer() | nil,
           interval: non_neg_integer(),
-          timeout: non_neg_integer()
+          timeout: non_neg_integer(),
+          mac_address: String.t() | nil
         }
 end
