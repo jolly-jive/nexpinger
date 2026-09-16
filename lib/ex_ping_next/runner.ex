@@ -25,7 +25,7 @@ defmodule ExPingNext.Runner do
 
   @impl true
   def init(%Host{} = host) do
-    schedule_next(host.interval)
+    schedule_next(0)
     {:ok, %{host: host, interval: host.interval}}
   end
 

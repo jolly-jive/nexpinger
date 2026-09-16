@@ -10,9 +10,15 @@ defmodule ExPingNext.Application do
       {DynamicSupervisor,
        strategy: :one_for_one,
        name: ExPingNext.MonitorSupervisor},
-      ExPingNext.Broadcaster
+      ExPingNext.Broadcaster,
+      ExPingNext.ConsoleSubscriber
     ]
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: ExPingNext.Supervisor)
+    {:ok, supervisor} =
+      Supervisor.start_link(children, strategy: :one_for_one, name: ExPingNext.Supervisor)
+
+    ExPingNext.Broadcaster.subscribe(ExPingNext.ConsoleSubscriber)
+
+    {:ok, supervisor}
   end
 end
