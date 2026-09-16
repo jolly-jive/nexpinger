@@ -1,22 +1,48 @@
 defmodule ExPingNext.Runner do
   @moduledoc """
-  1台のホストに対して interval 間隔で probe を繰り返し、
-  1行1項目のストリーム形式で標準出力へ結果を出し続ける。
+  1台のホストを監視するアクター。
+  監視対象ごとに独立したプロセスが interval ごとに probe を実行する。
   """
+
+  use GenServer
 
   alias ExPingNext.{Host, Prober}
 
-  @spec loop(Host.t()) :: no_return()
-  def loop(%Host{} = host) do
-    started_at = System.monotonic_time(:millisecond)
+  @type state :: %{
+          host: Host.t(),
+          interval: non_neg_integer()
+        }
+
+  @spec start_link(Host.t()) :: GenServer.on_start()
+  def start_link(%Host{} = host) do
+    GenServer.start_link(__MODULE__, host, name: via_name(host.name))
+  end
+
+  @spec probe(Host.t()) :: :ok
+  def probe(%Host{} = host) do
+    GenServer.cast(via_name(host.name), :probe)
+  end
+
+  @impl true
+  def init(%Host{} = host) do
+    schedule_next(host.interval)
+    {:ok, %{host: host, interval: host.interval}}
+  end
+
+  @impl true
+  def handle_info(:probe, %{host: host} = state) do
     result = Prober.probe(host)
     print_line(host, result)
+    schedule_next(state.interval)
+    {:noreply, state}
+  end
 
-    # 実測にかかった時間を差し引いて、なるべく interval 間隔を維持する
-    elapsed = System.monotonic_time(:millisecond) - started_at
-    Process.sleep(max(0, host.interval - elapsed))
+  defp schedule_next(interval) do
+    Process.send_after(self(), :probe, interval)
+  end
 
-    loop(host)
+  defp via_name(name) do
+    {:via, Registry, {ExPingNext.MonitorRegistry, name}}
   end
 
   defp print_line(host, {:ok, rtt_ms}) do

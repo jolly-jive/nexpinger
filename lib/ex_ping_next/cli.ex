@@ -1,13 +1,16 @@
 defmodule ExPingNext.CLI do
   @moduledoc """
   escript のエントリポイント。
-  使い方: exping_next [設定ファイルパス]  (省略時は hosts.yml)
+  使い方: exping_next [設定ファイルパス]  (省略時は config/hosts.yml)
   """
 
   alias ExPingNext.{Config, Runner}
 
+  @spec default_config_path() :: String.t()
+  def default_config_path, do: "config/hosts.yml"
+
   def main(argv) do
-    path = List.first(argv) || "hosts.yml"
+    path = List.first(argv) || default_config_path()
 
     case Config.load(path) do
       {:ok, []} ->
@@ -18,10 +21,11 @@ defmodule ExPingNext.CLI do
         IO.puts("ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台を監視します (#{path})")
         IO.puts(String.duplicate("-", 60))
 
-        {:ok, sup} = Task.Supervisor.start_link()
-
         Enum.each(hosts, fn host ->
-          Task.Supervisor.start_child(sup, fn -> Runner.loop(host) end)
+          case DynamicSupervisor.start_child(ExPingNext.MonitorSupervisor, {Runner, host}) do
+            {:ok, _pid} -> :ok
+            {:error, reason} -> IO.puts(:stderr, "監視対象の起動に失敗しました: #{inspect(reason)}")
+          end
         end)
 
         # メインプロセスは常駐させる（Ctrl+C で終了）
