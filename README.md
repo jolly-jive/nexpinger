@@ -52,6 +52,8 @@ mix escript.build
 - `--help`: ヘルプを表示
 - `config file`: 監視設定ファイルのパス（省略時は `config/hosts.yml`）
 
+`--log-file` を指定しない場合、ファイル出力は行いません。
+
 例:
 
 ```bash

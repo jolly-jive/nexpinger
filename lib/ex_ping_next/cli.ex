@@ -14,14 +14,10 @@ defmodule ExPingNext.CLI do
     --help              show this help message
 
   Default config: config/hosts.yml
-  Default log file: monitor.log
   """
 
   @spec default_config_path() :: String.t()
   def default_config_path, do: "config/hosts.yml"
-
-  @spec default_log_file() :: String.t()
-  def default_log_file, do: "monitor.log"
 
   @spec parse_options([String.t()]) :: {[log_file: String.t()], [String.t()], [String.t()]}
   def parse_options(argv) do
@@ -42,7 +38,7 @@ defmodule ExPingNext.CLI do
       System.halt(0)
     end
 
-    log_file = Keyword.get(opts, :log_file, default_log_file())
+    log_file = Keyword.get(opts, :log_file)
     stdout_enabled = not Keyword.get(opts, :no_stdout, false)
     path = List.first(args) || default_config_path()
 
@@ -53,11 +49,15 @@ defmodule ExPingNext.CLI do
 
       {:ok, hosts} ->
         IO.puts("ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台を監視します (#{path})")
-        IO.puts("ログ出力: #{log_file}")
+        if log_file do
+          IO.puts("ログ出力: #{log_file}")
+        end
         IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
         IO.puts(String.duplicate("-", 60))
 
-        start_log_file_subscriber(log_file)
+        if log_file do
+          start_log_file_subscriber(log_file)
+        end
 
         if stdout_enabled do
           ExPingNext.Broadcaster.subscribe(ExPingNext.ConsoleSubscriber)

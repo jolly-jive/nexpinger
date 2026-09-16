@@ -8,6 +8,11 @@ defmodule ExPingNext.CLITest do
              ExPingNext.CLI.parse_options(["--log-file", "/tmp/monitor.log", "config/hosts.yml"])
   end
 
+  test "does not configure file output without a log file option" do
+    assert {[], ["config/hosts.yml"], []} =
+             ExPingNext.CLI.parse_options(["config/hosts.yml"])
+  end
+
   test "parses no-stdout and help flags" do
     assert {[
               no_stdout: true,
