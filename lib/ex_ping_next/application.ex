@@ -9,7 +9,8 @@ defmodule ExPingNext.Application do
       {Registry, keys: :unique, name: ExPingNext.MonitorRegistry},
       {DynamicSupervisor,
        strategy: :one_for_one,
-       name: ExPingNext.MonitorSupervisor}
+       name: ExPingNext.MonitorSupervisor},
+      ExPingNext.Broadcaster
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: ExPingNext.Supervisor)

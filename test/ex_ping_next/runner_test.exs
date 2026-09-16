@@ -1,7 +1,7 @@
 defmodule ExPingNext.RunnerTest do
   use ExUnit.Case, async: true
 
-  alias ExPingNext.{Host, Runner}
+  alias ExPingNext.{Broadcaster, Host, Runner}
 
   test "starts a monitor process for a host under a supervisor" do
     {:ok, supervisor} =
@@ -23,5 +23,17 @@ defmodule ExPingNext.RunnerTest do
 
     Process.unlink(pid)
     Process.exit(pid, :kill)
+  end
+
+  test "publishes probe result through the broadcaster" do
+    host = %Host{
+      name: "broadcaster-test",
+      address: "127.0.0.1",
+      type: :icmp,
+      interval: 10,
+      timeout: 100
+    }
+
+    assert :ok = Broadcaster.publish(host, {:ok, 12.34})
   end
 end
