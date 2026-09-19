@@ -1,13 +1,13 @@
 defmodule ExPingNext.CLI do
   @moduledoc """
   escript のエントリポイント。
-  使い方: exping_next [--log-file PATH] [--no-stdout] [--help] [設定ファイルパス]
+  使い方: exping_next [--log-file PATH] [--no-stdout] [--help] [設定ファイルパス...]
   """
 
   alias ExPingNext.{Config, Runner}
 
   @usage """
-  Usage: exping_next [options] <config file>
+  Usage: exping_next [options] <config file>...
 
     --log-file PATH     write monitoring results to a log file
     --no-stdout         disable console output
@@ -37,28 +37,31 @@ defmodule ExPingNext.CLI do
     log_file = Keyword.get(opts, :log_file)
     stdout_enabled = not Keyword.get(opts, :no_stdout, false)
 
-    case List.first(args) do
-      nil ->
+    case args do
+      [] ->
         IO.puts(:stderr, "設定ファイルのパスを指定してください")
         System.halt(1)
 
-      path ->
-        run(path, log_file, stdout_enabled)
+      paths ->
+        run(paths, log_file, stdout_enabled)
     end
   end
 
-  defp run(path, log_file, stdout_enabled) do
-
-    case Config.load(path) do
+  defp run(paths, log_file, stdout_enabled) do
+    case load_hosts(paths) do
       {:ok, []} ->
-        IO.puts(:stderr, "設定ファイルに監視対象ホストが1件もありません: #{path}")
+        IO.puts(:stderr, "設定ファイルに監視対象ホストが1件もありません: #{Enum.join(paths, ", ")}")
         System.halt(1)
 
       {:ok, hosts} ->
-        IO.puts("ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台を監視します (#{path})")
+        IO.puts(
+          "ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台を監視します (#{Enum.join(paths, ", ")})"
+        )
+
         if log_file do
           IO.puts("ログ出力: #{log_file}")
         end
+
         IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
         IO.puts(String.duplicate("-", 60))
 
@@ -83,6 +86,24 @@ defmodule ExPingNext.CLI do
       {:error, reason} ->
         IO.puts(:stderr, "設定ファイルの読み込みに失敗しました: #{inspect(reason)}")
         System.halt(1)
+    end
+  end
+
+  defp load_hosts(paths) do
+    result =
+      Enum.reduce_while(paths, {:ok, []}, fn path, {:ok, hosts} ->
+        case Config.load(path) do
+          {:ok, file_hosts} ->
+            {:cont, {:ok, [file_hosts | hosts]}}
+
+          {:error, reason} ->
+            {:halt, {:error, {path, reason}}}
+        end
+      end)
+
+    case result do
+      {:ok, host_lists} -> {:ok, List.flatten(host_lists)}
+      error -> error
     end
   end
 
