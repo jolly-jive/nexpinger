@@ -7,17 +7,13 @@ defmodule ExPingNext.CLI do
   alias ExPingNext.{Config, Runner}
 
   @usage """
-  Usage: exping_next [options] [config file]
+  Usage: exping_next [options] <config file>
 
     --log-file PATH     write monitoring results to a log file
     --no-stdout         disable console output
     --help              show this help message
 
-  Default config: config/hosts.yml
   """
-
-  @spec default_config_path() :: String.t()
-  def default_config_path, do: "config/hosts.yml"
 
   @spec parse_options([String.t()]) :: {[log_file: String.t()], [String.t()], [String.t()]}
   def parse_options(argv) do
@@ -40,7 +36,18 @@ defmodule ExPingNext.CLI do
 
     log_file = Keyword.get(opts, :log_file)
     stdout_enabled = not Keyword.get(opts, :no_stdout, false)
-    path = List.first(args) || default_config_path()
+
+    case List.first(args) do
+      nil ->
+        IO.puts(:stderr, "設定ファイルのパスを指定してください")
+        System.halt(1)
+
+      path ->
+        run(path, log_file, stdout_enabled)
+    end
+  end
+
+  defp run(path, log_file, stdout_enabled) do
 
     case Config.load(path) do
       {:ok, []} ->

@@ -51,14 +51,14 @@ mix escript.build
 - `--log-file PATH`: 監視結果を指定したファイルへ追記
 - `--no-stdout`: コンソールへの出力を抑止
 - `--help`: ヘルプを表示
-- `config file`: 監視設定ファイルのパス（省略時は `config/hosts.yml`）
+- `config file`: 監視設定ファイルのパス（必須）
 
 `--log-file` を指定しない場合、ファイル出力は行いません。
 
 例:
 
 ```bash
-./exping_next --log-file ./monitor.log --no-stdout
+./exping_next --log-file ./monitor.log --no-stdout config/hosts.yml
 ```
 
 この場合、ファイルへ記録される一方で標準出力には結果が表示されません。
