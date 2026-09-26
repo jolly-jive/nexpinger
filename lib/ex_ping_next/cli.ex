@@ -27,7 +27,14 @@ defmodule ExPingNext.CLI do
   end
 
   def main(argv) do
-    {opts, args, _invalid} = parse_options(argv)
+    {opts, args, invalid} = parse_options(argv)
+
+    if invalid != [] do
+      invalid_options = Enum.map_join(invalid, ", ", fn {option, _value} -> option end)
+      IO.puts(:stderr, "不正なオプションです: #{invalid_options}")
+      IO.puts(:stderr, @usage)
+      System.halt(1)
+    end
 
     if Keyword.get(opts, :help, false) do
       IO.puts(@usage)

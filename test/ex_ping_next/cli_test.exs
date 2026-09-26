@@ -20,4 +20,9 @@ defmodule ExPingNext.CLITest do
             ], [], []} =
              ExPingNext.CLI.parse_options(["--no-stdout", "--help"])
   end
+
+  test "returns invalid options" do
+    assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
+             ExPingNext.CLI.parse_options(["--unknown", "config/hosts.yml"])
+  end
 end
