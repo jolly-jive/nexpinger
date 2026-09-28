@@ -29,6 +29,28 @@ defmodule ExPingNext.ConfigTest do
            ]
   end
 
+  test "auto-detects hosts format and creates ICMP items" do
+    path =
+      write_config!("""
+      # local hosts
+      127.0.0.1 localhost localhost.localdomain
+      ::1 ip6-localhost ip6-loopback # IPv6 loopback
+      192.168.1.5 nas
+      """)
+
+    assert {:ok, hosts} = Config.load(path)
+
+    assert Enum.map(hosts, &{&1.name, &1.address}) == [
+             {"localhost", "127.0.0.1"},
+             {"ip6-localhost", "::1"},
+             {"nas", "192.168.1.5"}
+           ]
+
+    assert Enum.all?(hosts, fn host ->
+             host.items == [%Item{name: "icmp", type: :icmp}]
+           end)
+  end
+
   test "requires a port for TCP items" do
     path =
       write_config!("""

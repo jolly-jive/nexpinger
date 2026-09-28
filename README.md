@@ -63,7 +63,11 @@ mix escript.build
 
 この場合、ファイルへ記録される一方で標準出力には結果が表示されません。
 
-## 設定ファイル (`config/hosts.yml`)
+## 設定ファイル
+
+YAML 形式と `/etc/hosts` 形式を内容から自動判定します。hosts 形式では各有効行の IP アドレスと最初のホスト名を使って ICMP 監視を行います。追加の別名は同じホストを指すため個別の監視項目にはなりません。監視間隔とタイムアウトは Item の既定値（各1000ミリ秒）です。TCP 監視など詳細な設定には YAML 形式を使ってください。
+
+### YAML (`config/hosts.yml`)
 
 ```yaml
 hosts:
@@ -91,6 +95,14 @@ hosts:
 - ホストは `name` と `address` を持ち、`items` に1つ以上の監視項目を定義します
 - Item は `name`、`type`（`icmp` または `tcp`）、`interval`（ミリ秒）、`timeout`（ミリ秒、省略時1000）を持ちます
 - `port` は `type: tcp` の場合に必須です
+
+### hosts 形式
+
+```text
+127.0.0.1 localhost localhost.localdomain
+::1       ip6-localhost ip6-loopback
+192.168.1.5 nas
+```
 
 ## 出力例
 
