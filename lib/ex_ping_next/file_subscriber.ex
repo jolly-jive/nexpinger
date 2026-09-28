@@ -5,7 +5,7 @@ defmodule ExPingNext.FileSubscriber do
 
   use GenServer
 
-  alias ExPingNext.Host
+  alias ExPingNext.{Host, Item}
 
   def start_link(path \\ "monitor.log", name \\ __MODULE__, owner \\ nil) do
     GenServer.start_link(__MODULE__, {path, owner}, name: name)
@@ -19,11 +19,14 @@ defmodule ExPingNext.FileSubscriber do
   end
 
   @impl true
-  def handle_info({:host_result, %Host{} = host, {:ok, rtt_ms}}, %{path: path, owner: owner} = state) do
+  def handle_info(
+        {:item_result, %Host{} = host, %Item{} = item, {:ok, rtt_ms}},
+        %{path: path, owner: owner} = state
+      ) do
     line = [
       timestamp(),
       " | ",
-      format_label(host),
+      format_label(host, item),
       status_tag(:ok),
       " ",
       :io_lib.format("~7.2f ms", [rtt_ms]),
@@ -35,8 +38,11 @@ defmodule ExPingNext.FileSubscriber do
     {:noreply, state}
   end
 
-  def handle_info({:host_result, %Host{} = host, {:error, reason}}, %{path: path, owner: owner} = state) do
-    line = [timestamp(), " | ", format_label(host), status_tag(:ng), " ", reason, "\n"]
+  def handle_info(
+        {:item_result, %Host{} = host, %Item{} = item, {:error, reason}},
+        %{path: path, owner: owner} = state
+      ) do
+    line = [timestamp(), " | ", format_label(host, item), status_tag(:ng), " ", reason, "\n"]
     append_line(path, line)
     notify_owner(owner, {:file_written, path})
     {:noreply, state}
@@ -50,11 +56,16 @@ defmodule ExPingNext.FileSubscriber do
   defp notify_owner(nil, _message), do: :ok
   defp notify_owner(owner, message), do: send(owner, message)
 
-  defp format_label(%Host{name: name, address: address, type: type} = host) do
+  defp format_label(%Host{name: name, address: address} = host, %Item{
+         name: item_name,
+         type: type,
+         port: port
+       }) do
     type_str = type |> Atom.to_string() |> String.upcase() |> String.pad_trailing(4)
+    item_label = if port, do: "#{item_name}:#{port}", else: item_name
 
     [
-      String.pad_trailing(name, 16),
+      String.pad_trailing("#{name}/#{item_label}", 24),
       "(",
       String.pad_trailing(address, 15),
       ") ",

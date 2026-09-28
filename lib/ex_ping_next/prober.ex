@@ -5,17 +5,17 @@ defmodule ExPingNext.Prober do
   TCP は :gen_tcp.connect の成否とRTTを計測する。
   """
 
-  alias ExPingNext.Host
+  alias ExPingNext.{Host, Item}
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, reason :: String.t()}
 
-  @spec probe(Host.t()) :: result()
-  def probe(%Host{type: :icmp} = host), do: icmp_probe(host)
-  def probe(%Host{type: :tcp} = host), do: tcp_probe(host)
+  @spec probe(Host.t(), Item.t()) :: result()
+  def probe(%Host{} = host, %Item{type: :icmp} = item), do: icmp_probe(host, item)
+  def probe(%Host{} = host, %Item{type: :tcp} = item), do: tcp_probe(host, item)
 
   # ---- ICMP ----------------------------------------------------------
 
-  defp icmp_probe(%Host{address: address, timeout: timeout}) do
+  defp icmp_probe(%Host{address: address}, %Item{timeout: timeout}) do
     args = icmp_args(address, timeout)
 
     task = Task.async(fn -> System.cmd("ping", args, stderr_to_stdout: true) end)
@@ -63,7 +63,7 @@ defmodule ExPingNext.Prober do
 
   # ---- TCP -------------------------------------------------------------
 
-  defp tcp_probe(%Host{address: address, port: port, timeout: timeout}) do
+  defp tcp_probe(%Host{address: address}, %Item{port: port, timeout: timeout}) do
     start = System.monotonic_time(:microsecond)
 
     case :gen_tcp.connect(to_charlist(address), port, [:binary, active: false], timeout) do

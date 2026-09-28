@@ -4,8 +4,8 @@ ExPing 後継プロジェクトの Elixir 実装。まずは CUI 版（1行1項�
 
 ## 機能（現時点）
 
-- YAML設定ファイルからホスト一覧を読み込み
-- ホストごとに独立した間隔（interval）でループ監視
+- YAML設定ファイルからホストと監視項目（Item）を読み込み
+- Item ごとに独立した間隔（interval）でループ監視
 - ICMP Ping（OSの `ping` コマンドを実行、特権不要）
 - TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測）
 - 1行1項目のストリーム出力（成功=緑 OK / 失敗=赤 NG）
@@ -69,28 +69,35 @@ mix escript.build
 hosts:
   - name: gateway
     address: 192.168.1.1
-    type: icmp
-    interval: 1000
+    items:
+      - name: ping
+        type: icmp
+        interval: 1000
 
-  - name: web-service
+  - name: web-server
     address: example.com
-    type: tcp
-    port: 443
-    interval: 3000
-    timeout: 1000
+    items:
+      - name: https
+        type: tcp
+        port: 443
+        interval: 3000
+        timeout: 1000
+      - name: http
+        type: tcp
+        port: 80
+        interval: 5000
 ```
 
-- `type`: `icmp` または `tcp`
-- `interval`: 監視間隔（ミリ秒）
-- `timeout`: 応答待ちタイムアウト（ミリ秒、省略時1000）
-- `port`: `type: tcp` の場合は必須
+- ホストは `name` と `address` を持ち、`items` に1つ以上の監視項目を定義します
+- Item は `name`、`type`（`icmp` または `tcp`）、`interval`（ミリ秒）、`timeout`（ミリ秒、省略時1000）を持ちます
+- `port` は `type: tcp` の場合に必須です
 
 ## 出力例
 
 ```
-2026-09-16 12:00:00.123 | gateway         (192.168.1.1    ) 08:33:ed:8f:c1:f2 ICMP OK    1.23 ms
-2026-09-16 12:00:01.456 | web-service     (example.com    )                   TCP  OK   45.67 ms
-2026-09-16 12:00:02.789 | dns-server      (192.168.1.10   )                   ICMP NG    timeout
+2026-09-16 12:00:00.123 | gateway/ping             (192.168.1.1    ) 08:33:ed:8f:c1:f2 ICMP OK    1.23 ms
+2026-09-16 12:00:01.456 | web-server/https:443      (example.com    )                   TCP  OK   45.67 ms
+2026-09-16 12:00:02.789 | dns-server/ping           (192.168.1.10   )                   ICMP NG    timeout
 ```
 
 同一 IP サブネット上で MAC アドレスを取得できた場合だけ表示し、取得できない場合も同じ幅の空白を確保します。ログファイルへは同じ形式で追記されます。`--no-stdout` を付けると、コンソール側には出力されず、ファイルのみに残ります。

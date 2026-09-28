@@ -1,7 +1,7 @@
 defmodule ExPingNext.RunnerTest do
   use ExUnit.Case, async: false
 
-  alias ExPingNext.{Broadcaster, Host, Runner}
+  alias ExPingNext.{Broadcaster, Host, Item, Runner}
 
   defmodule NamedSubscriber do
     use GenServer
@@ -12,8 +12,8 @@ defmodule ExPingNext.RunnerTest do
 
     def init(owner), do: {:ok, %{owner: owner}}
 
-    def handle_info({:host_result, host, event}, %{owner: owner} = state) do
-      send(owner, {:named_result, host, event})
+    def handle_info({:item_result, host, item, event}, %{owner: owner} = state) do
+      send(owner, {:named_result, host, item, event})
       {:noreply, state}
     end
   end
@@ -28,12 +28,12 @@ defmodule ExPingNext.RunnerTest do
     host = %Host{
       name: "local-test",
       address: "127.0.0.1",
-      type: :icmp,
-      interval: 10,
-      timeout: 100
+      items: []
     }
 
-    assert {:ok, pid} = DynamicSupervisor.start_child(supervisor, {Runner, host})
+    item = %Item{name: "icmp", type: :icmp, interval: 10, timeout: 100}
+
+    assert {:ok, pid} = DynamicSupervisor.start_child(supervisor, {Runner, {host, item}})
     assert Process.alive?(pid)
 
     Process.unlink(pid)
@@ -44,46 +44,46 @@ defmodule ExPingNext.RunnerTest do
     host = %Host{
       name: "broadcaster-test",
       address: "127.0.0.1",
-      type: :icmp,
-      interval: 10,
-      timeout: 100
+      items: []
     }
 
-    Broadcaster.subscribe(self())
-    assert :ok = Broadcaster.publish(host, {:ok, 12.34})
+    item = %Item{name: "icmp", type: :icmp, interval: 10, timeout: 100}
 
-    assert_receive {:host_result, ^host, {:ok, 12.34}}
+    Broadcaster.subscribe(self())
+    assert :ok = Broadcaster.publish(host, item, {:ok, 12.34})
+
+    assert_receive {:item_result, ^host, ^item, {:ok, 12.34}}
   end
 
   test "publishes probe result to a named subscriber" do
     host = %Host{
       name: "named-broadcaster-test",
       address: "127.0.0.1",
-      type: :icmp,
-      interval: 10,
-      timeout: 100
+      items: []
     }
+
+    item = %Item{name: "icmp", type: :icmp, interval: 10, timeout: 100}
 
     {:ok, _pid} = NamedSubscriber.start_link(:named_subscriber_test, self())
     assert :ok = Broadcaster.subscribe(:named_subscriber_test)
-    assert :ok = Broadcaster.publish(host, {:ok, 7.89})
+    assert :ok = Broadcaster.publish(host, item, {:ok, 7.89})
 
-    assert_receive {:named_result, ^host, {:ok, 7.89}}
+    assert_receive {:named_result, ^host, ^item, {:ok, 7.89}}
   end
 
   test "fires the first probe immediately after startup" do
     host = %Host{
       name: "immediate-check",
       address: "127.0.0.1",
-      type: :icmp,
-      interval: 5000,
-      timeout: 200
+      items: []
     }
 
-    Broadcaster.subscribe(self())
-    {:ok, pid} = Runner.start_link(host)
+    item = %Item{name: "icmp", type: :icmp, interval: 5000, timeout: 200}
 
-    assert_receive {:host_result, %Host{name: "immediate-check"}, {:ok, _rtt}}, 1000
+    Broadcaster.subscribe(self())
+    {:ok, pid} = Runner.start_link({host, item})
+
+    assert_receive {:item_result, %Host{name: "immediate-check"}, ^item, {:ok, _rtt}}, 1000
 
     Process.exit(pid, :kill)
   end
@@ -92,10 +92,10 @@ defmodule ExPingNext.RunnerTest do
     host = %Host{
       name: "dual-output",
       address: "127.0.0.1",
-      type: :icmp,
-      interval: 10,
-      timeout: 100
+      items: []
     }
+
+    item = %Item{name: "icmp", type: :icmp, interval: 10, timeout: 100}
 
     path = "/tmp/ex_ping_next_dual_output.log"
     File.rm(path)
@@ -103,9 +103,9 @@ defmodule ExPingNext.RunnerTest do
     {:ok, _pid} = ExPingNext.FileSubscriber.start_link(path, :test_file_subscriber, self())
     assert :ok = Broadcaster.subscribe(self())
     assert :ok = Broadcaster.subscribe(:test_file_subscriber)
-    assert :ok = Broadcaster.publish(host, {:ok, 99.99})
+    assert :ok = Broadcaster.publish(host, item, {:ok, 99.99})
 
-    assert_receive {:host_result, ^host, {:ok, 99.99}}
+    assert_receive {:item_result, ^host, ^item, {:ok, 99.99}}
     assert_receive {:file_written, ^path}
     assert {:ok, content} = File.read(path)
     assert String.contains?(content, "dual-output")
@@ -115,9 +115,11 @@ defmodule ExPingNext.RunnerTest do
     with_mac = %Host{
       name: "with-mac",
       address: "192.168.0.1",
-      type: :icmp,
+      items: [],
       mac_address: "08:33:ed:8f:c1:f2"
     }
+
+    item = %Item{name: "icmp", type: :icmp}
 
     without_mac = %{with_mac | name: "without-mac", mac_address: nil}
     mac_path = "/tmp/ex_ping_next_with_mac.log"
@@ -127,8 +129,8 @@ defmodule ExPingNext.RunnerTest do
 
     {:ok, mac_pid} = ExPingNext.FileSubscriber.start_link(mac_path, nil, self())
     {:ok, no_mac_pid} = ExPingNext.FileSubscriber.start_link(no_mac_path, nil, self())
-    send(mac_pid, {:host_result, with_mac, {:ok, 1.23}})
-    send(no_mac_pid, {:host_result, without_mac, {:ok, 1.23}})
+    send(mac_pid, {:item_result, with_mac, item, {:ok, 1.23}})
+    send(no_mac_pid, {:item_result, without_mac, item, {:ok, 1.23}})
 
     assert_receive {:file_written, ^mac_path}
     assert_receive {:file_written, ^no_mac_path}

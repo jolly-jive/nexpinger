@@ -61,8 +61,10 @@ defmodule ExPingNext.CLI do
         System.halt(1)
 
       {:ok, hosts} ->
+        item_count = Enum.sum(Enum.map(hosts, &length(&1.items)))
+
         IO.puts(
-          "ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台を監視します (#{Enum.join(paths, ", ")})"
+          "ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台 / #{item_count} 項目を監視します (#{Enum.join(paths, ", ")})"
         )
 
         if log_file do
@@ -81,10 +83,15 @@ defmodule ExPingNext.CLI do
         end
 
         Enum.each(hosts, fn host ->
-          case DynamicSupervisor.start_child(ExPingNext.MonitorSupervisor, {Runner, host}) do
-            {:ok, _pid} -> :ok
-            {:error, reason} -> IO.puts(:stderr, "監視対象の起動に失敗しました: #{inspect(reason)}")
-          end
+          Enum.each(host.items, fn item ->
+            case DynamicSupervisor.start_child(
+                   ExPingNext.MonitorSupervisor,
+                   {Runner, {host, item}}
+                 ) do
+              {:ok, _pid} -> :ok
+              {:error, reason} -> IO.puts(:stderr, "監視項目の起動に失敗しました: #{inspect(reason)}")
+            end
+          end)
         end)
 
         # メインプロセスは常駐させる（Ctrl+C で終了）

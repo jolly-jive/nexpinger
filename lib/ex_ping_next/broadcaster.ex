@@ -5,7 +5,7 @@ defmodule ExPingNext.Broadcaster do
 
   use GenServer
 
-  alias ExPingNext.Host
+  alias ExPingNext.{Host, Item}
 
   @type event :: {:ok, float()} | {:error, String.t()}
   @type subscriber :: pid() | atom()
@@ -14,9 +14,9 @@ defmodule ExPingNext.Broadcaster do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec publish(Host.t(), event()) :: :ok
-  def publish(%Host{} = host, event) do
-    GenServer.cast(__MODULE__, {:publish, host, event})
+  @spec publish(Host.t(), Item.t(), event()) :: :ok
+  def publish(%Host{} = host, %Item{} = item, event) do
+    GenServer.cast(__MODULE__, {:publish, host, item, event})
   end
 
   @spec subscribe(subscriber()) :: :ok | {:error, :not_found}
@@ -41,9 +41,9 @@ defmodule ExPingNext.Broadcaster do
     {:noreply, %{state | subscribers: Enum.uniq([subscriber | subscribers])}}
   end
 
-  def handle_cast({:publish, host, event}, %{subscribers: subscribers} = state) do
+  def handle_cast({:publish, host, item, event}, %{subscribers: subscribers} = state) do
     Enum.each(subscribers, fn subscriber ->
-      send(subscriber, {:host_result, host, event})
+      send(subscriber, {:item_result, host, item, event})
     end)
 
     {:noreply, state}
