@@ -21,6 +21,20 @@ defmodule ExPingNext.CLITest do
              ExPingNext.CLI.parse_options(["--no-stdout", "--help"])
   end
 
+  test "parses RTT statistics window and width options" do
+    assert {[
+              stats_window: 250,
+              stats_width: 120
+            ], ["config/hosts.yml"], []} =
+             ExPingNext.CLI.parse_options([
+               "--stats-window",
+               "250",
+               "--stats-width",
+               "120",
+               "config/hosts.yml"
+             ])
+  end
+
   test "returns invalid options" do
     assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
              ExPingNext.CLI.parse_options(["--unknown", "config/hosts.yml"])

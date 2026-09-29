@@ -1,6 +1,6 @@
 # ExPing Next (Elixir CUI版)
 
-ExPing 後継プロジェクトの Elixir 実装。まずは CUI 版（1行1項目のストリーム出力型）のみ。
+ExPing 後継プロジェクトの Elixir 実装。TTY では「Ping結果」と「Ping統計」を切り替えて表示できます。
 
 ## 機能（現時点）
 
@@ -9,6 +9,9 @@ ExPing 後継プロジェクトの Elixir 実装。まずは CUI 版（1行1項�
 - ICMP Ping（OSの `ping` コマンドを実行、特権不要）
 - TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測）
 - 1行1項目のストリーム出力（成功=緑 OK / 失敗=赤 NG）
+- TTY で `Tab` を押すと Ping結果の追記表示と Ping統計を切り替え
+- Ping統計で Item ごとの実施回数、失敗回数、失敗率、最新 RTT、平均、P95、P99を表示
+- RTT の集計窓は `--stats-window` で指定（既定値1000試行）
 - 監視結果を stdout とログファイルの両方へ出力可能
 - `--no-stdout` でコンソール表示を無効化可能
 - `--help` でヘルプを表示可能
@@ -33,6 +36,7 @@ mix run --no-halt -e 'ExPingNext.CLI.main(["config/hosts.yml"])'
 ```bash
 mix run --no-halt -e 'ExPingNext.CLI.main(["--log-file", "/tmp/exping.log", "config/hosts.yml"])'
 mix run --no-halt -e 'ExPingNext.CLI.main(["--no-stdout", "--log-file", "/tmp/exping.log", "config/hosts.yml"])'
+mix run --no-halt -e 'ExPingNext.CLI.main(["--stats-window", "500", "--stats-width", "120", "config/hosts.yml"])'
 mix run --no-halt -e 'ExPingNext.CLI.main(["--help"])'
 ```
 
@@ -43,6 +47,7 @@ mix escript.build
 ./exping_next config/hosts.yml
 ./exping_next --log-file /tmp/exping.log config/hosts.yml
 ./exping_next --no-stdout --log-file /tmp/exping.log config/hosts.yml
+./exping_next --stats-window 500 --stats-width 120 config/hosts.yml
 ./exping_next --help
 ```
 
@@ -50,10 +55,16 @@ mix escript.build
 
 - `--log-file PATH`: 監視結果を指定したファイルへ追記
 - `--no-stdout`: コンソールへの出力を抑止
+- `--stats-window N`: 平均・P95・P99 を計算する直近試行数（既定値1000、1以上）
+- `--stats-width N`: 統計画面の幅（80または120桁、省略時は端末幅から選択）
 - `--help`: ヘルプを表示
 - `config file`: 監視設定ファイルのパス（1つ以上必須。複数指定時はすべて読み込み）
 
 `--log-file` を指定しない場合、ファイル出力は行いません。
+
+TTY では `Tab` で Ping結果と Ping統計を切り替え、統計画面では上下キーまたは `j`/`k` で一覧をスクロールします。統計は Host/Item ごとに表示し、実施回数・失敗回数・失敗率は起動中の累計です。平均・P95・P99 は直近 `N` 回の試行に含まれる成功 RTT のみで計算し、失敗試行は RTT 統計から除外します。最新欄は成功時に `OK <RTT>`、失敗時に `NG` と表示します。単位は画面上部に `RTT: ms` と表示します。失敗時のベル通知はどちらの画面でも行われます。TTY が使えない場合は従来の追記出力になります。
+
+統計のパーセンタイルは nearest-rank 方式で計算します。RTT サンプルがない場合は `-` を表示します。
 
 例:
 

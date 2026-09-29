@@ -7,10 +7,11 @@ defmodule ExPingNext.ConsoleSubscriberTest do
   test "beeps when an item result is an error" do
     host = %Host{name: "gateway", address: "192.0.2.1", items: []}
     item = %Item{name: "ping", type: :icmp}
+    {:ok, state} = ConsoleSubscriber.init([])
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, host, item, {:error, "timeout"}}, %{})
+        ConsoleSubscriber.handle_info({:item_result, host, item, {:error, "timeout"}}, state)
       end)
 
     assert output =~ "\a"
@@ -20,10 +21,11 @@ defmodule ExPingNext.ConsoleSubscriberTest do
   test "does not beep when an item result succeeds" do
     host = %Host{name: "gateway", address: "192.0.2.1", items: []}
     item = %Item{name: "ping", type: :icmp}
+    {:ok, state} = ConsoleSubscriber.init([])
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, %{})
+        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
       end)
 
     refute output =~ "\a"

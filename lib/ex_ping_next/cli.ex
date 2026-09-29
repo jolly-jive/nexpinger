@@ -4,23 +4,27 @@ defmodule ExPingNext.CLI do
   使い方: exping_next [--log-file PATH] [--no-stdout] [--help] [設定ファイルパス...]
   """
 
-  alias ExPingNext.{Config, Runner}
+  alias ExPingNext.{Config, ConsoleSubscriber, Runner, TerminalInput}
 
   @usage """
   Usage: exping_next [options] <config file>...
 
     --log-file PATH     write monitoring results to a log file
     --no-stdout         disable console output
+    --stats-window N    use the last N attempts for RTT statistics (default: 1000)
+    --stats-width N     use an 80- or 120-column statistics layout
     --help              show this help message
 
   """
 
-  @spec parse_options([String.t()]) :: {[log_file: String.t()], [String.t()], [String.t()]}
+  @spec parse_options([String.t()]) :: {keyword(), [String.t()], [String.t()]}
   def parse_options(argv) do
     OptionParser.parse(argv,
       strict: [
         log_file: :string,
         no_stdout: :boolean,
+        stats_window: :integer,
+        stats_width: :integer,
         help: :boolean
       ]
     )
@@ -36,6 +40,8 @@ defmodule ExPingNext.CLI do
       System.halt(1)
     end
 
+    validate_stats_options!(opts)
+
     if Keyword.get(opts, :help, false) do
       IO.puts(@usage)
       System.halt(0)
@@ -43,6 +49,8 @@ defmodule ExPingNext.CLI do
 
     log_file = Keyword.get(opts, :log_file)
     stdout_enabled = not Keyword.get(opts, :no_stdout, false)
+    stats_window = Keyword.get(opts, :stats_window, 1000)
+    requested_stats_width = Keyword.get(opts, :stats_width)
 
     case args do
       [] ->
@@ -50,11 +58,11 @@ defmodule ExPingNext.CLI do
         System.halt(1)
 
       paths ->
-        run(paths, log_file, stdout_enabled)
+        run(paths, log_file, stdout_enabled, stats_window, requested_stats_width)
     end
   end
 
-  defp run(paths, log_file, stdout_enabled) do
+  defp run(paths, log_file, stdout_enabled, stats_window, requested_stats_width) do
     case load_hosts(paths) do
       {:ok, []} ->
         IO.puts(:stderr, "設定ファイルに監視対象ホストが1件もありません: #{Enum.join(paths, ", ")}")
@@ -62,6 +70,11 @@ defmodule ExPingNext.CLI do
 
       {:ok, hosts} ->
         item_count = Enum.sum(Enum.map(hosts, &length(&1.items)))
+        stats_width = requested_stats_width || TerminalInput.terminal_width()
+        stats_height = TerminalInput.terminal_height()
+        interactive? = stdout_enabled and TerminalInput.available?()
+
+        ConsoleSubscriber.configure(hosts, stats_window, stats_width, stats_height)
 
         IO.puts(
           "ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台 / #{item_count} 項目を監視します (#{Enum.join(paths, ", ")})"
@@ -94,12 +107,37 @@ defmodule ExPingNext.CLI do
           end)
         end)
 
-        # メインプロセスは常駐させる（Ctrl+C で終了）
-        Process.sleep(:infinity)
+        if interactive? do
+          case TerminalInput.run() do
+            :quit -> System.halt(0)
+            :unavailable -> Process.sleep(:infinity)
+          end
+        else
+          # メインプロセスは常駐させる（Ctrl+C で終了）
+          Process.sleep(:infinity)
+        end
 
       {:error, reason} ->
         IO.puts(:stderr, "設定ファイルの読み込みに失敗しました: #{inspect(reason)}")
         System.halt(1)
+    end
+  end
+
+  defp validate_stats_options!(opts) do
+    stats_window = Keyword.get(opts, :stats_window, 1000)
+    stats_width = Keyword.get(opts, :stats_width)
+
+    cond do
+      stats_window <= 0 ->
+        IO.puts(:stderr, "--stats-window は1以上を指定してください")
+        System.halt(1)
+
+      not is_nil(stats_width) and stats_width not in [80, 120] ->
+        IO.puts(:stderr, "--stats-width は80または120を指定してください")
+        System.halt(1)
+
+      true ->
+        :ok
     end
   end
 
