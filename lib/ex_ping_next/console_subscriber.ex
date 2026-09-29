@@ -29,6 +29,8 @@ defmodule ExPingNext.ConsoleSubscriber do
   end
 
   def handle_info({:item_result, %Host{} = host, %Item{} = item, {:error, reason}}, state) do
+    IO.write("\a")
+
     IO.puts([
       timestamp(),
       " | ",
