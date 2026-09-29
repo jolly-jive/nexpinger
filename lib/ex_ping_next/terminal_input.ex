@@ -109,7 +109,7 @@ defmodule ExPingNext.TerminalInput do
         ConsoleSubscriber.toggle_view()
         input_loop(read)
 
-      {:ok, <<3>>} ->
+      {:ok, key} when key in [<<?q>>, <<?Q>>, <<3>>] ->
         :quit
 
       {:ok, <<27>>} ->

@@ -113,7 +113,7 @@ defmodule ExPingNext.CLI do
             :unavailable -> Process.sleep(:infinity)
           end
         else
-          # メインプロセスは常駐させる（Ctrl+C で終了）
+          # キー入力が使えないため、メインプロセスは常駐させる（Ctrl+C で終了）
           Process.sleep(:infinity)
         end
 

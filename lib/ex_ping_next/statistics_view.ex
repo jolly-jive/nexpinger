@@ -34,7 +34,7 @@ defmodule ExPingNext.StatisticsView do
     row_lines = Enum.map(displayed, &(&1 |> format_entry(column_widths) |> fit(width)))
 
     footer =
-      "Rows #{if entries == [], do: 0, else: offset + 1}-#{finish} of #{length(entries)} | TAB: Ping Results | Up/Down: scroll | Ctrl+C: quit"
+      "Rows #{if entries == [], do: 0, else: offset + 1}-#{finish} of #{length(entries)} | TAB: Ping Results | Up/Down: scroll | Q: quit"
 
     Enum.join(lines ++ row_lines ++ [fit(footer, width)], "\r\n") <> "\r\n"
   end
