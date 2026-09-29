@@ -8,7 +8,8 @@ defmodule ExPingNext.MixProject do
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      escript: escript()
+      escript: escript(),
+      releases: releases()
     ]
   end
 
@@ -21,11 +22,25 @@ defmodule ExPingNext.MixProject do
 
   defp deps do
     [
-      {:yaml_elixir, "~> 2.9"}
+      {:yaml_elixir, "~> 2.9"},
+      {:burrito, "~> 1.0", runtime: false}
     ]
   end
 
   defp escript do
     [main_module: ExPingNext.CLI, name: "exping_next"]
+  end
+
+  defp releases do
+    [
+      exping_next: [
+        steps: [:assemble, &Burrito.wrap/1],
+        burrito: [
+          targets: [
+            windows: [os: :windows, cpu: :x86_64]
+          ]
+        ]
+      ]
+    ]
   end
 end

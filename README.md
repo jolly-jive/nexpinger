@@ -51,6 +51,20 @@ mix escript.build
 ./exping_next --help
 ```
 
+### 3. Burrito で単体実行ファイルとしてビルドして実行
+
+Burrito は Windows 上でのビルドに対応していないため、WSL でビルドする。
+WSL では Zig のキャッシュを Linux 側に置かないとビルドに失敗する。
+
+```bash
+ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-exping-next MIX_ENV=prod BURRITO_TARGET=windows mix release
+```
+
+```powershell
+.\burrito_out\exping_next_windows.exe --help
+.\burrito_out\exping_next_windows.exe config\hosts.yml
+```
+
 ## CLI オプション
 
 - `--log-file PATH`: 監視結果を指定したファイルへ追記

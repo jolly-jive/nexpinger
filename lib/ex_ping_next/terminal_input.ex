@@ -1,11 +1,16 @@
 defmodule ExPingNext.TerminalInput do
   @moduledoc """
   TTY が利用可能なとき、raw mode で統計画面のキー入力を処理する。
+  Unix では stty、Windows では OTP 26 以降の `:shell.start_interactive({:noshell, :raw})` を使う。
   """
 
   alias ExPingNext.ConsoleSubscriber
 
   def available? do
+    if windows?(), do: windows_available?(), else: unix_available?()
+  end
+
+  defp unix_available? do
     with true <- stty_prefix() != nil,
          {:ok, _settings} <- stty(["-g"]),
          {:ok, device} <- File.open(tty_path(), [:read, :raw, :binary]) do
@@ -37,11 +42,15 @@ defmodule ExPingNext.TerminalInput do
   end
 
   def run do
+    if windows?(), do: windows_run(), else: unix_run()
+  end
+
+  defp unix_run do
     with {:ok, original_settings} <- stty(["-g"]),
          {:ok, device} <- File.open(tty_path(), [:read, :raw, :binary]) do
       try do
         case stty(["raw", "-echo", "opost"]) do
-          {:ok, _output} -> input_loop(device)
+          {:ok, _output} -> input_loop(fn -> :file.read(device, 1) end)
           {:error, _reason} -> :unavailable
         end
       after
@@ -59,29 +68,64 @@ defmodule ExPingNext.TerminalInput do
     _error -> :unavailable
   end
 
-  defp input_loop(device) do
-    case :file.read(device, 1) do
+  # Windows には stty も /proc も無いため、OTP 26 以降の noshell raw mode を使う。
+  defp windows_available? do
+    Code.ensure_loaded?(:shell) and function_exported?(:shell, :start_interactive, 1)
+  end
+
+  defp windows_run do
+    case :shell.start_interactive({:noshell, :raw}) do
+      :ok ->
+        try do
+          input_loop(&read_stdio_char/0)
+        after
+          try do
+            ConsoleSubscriber.end_stats_view()
+          after
+            :shell.start_interactive({:noshell, :cooked})
+          end
+        end
+
+      {:error, _reason} ->
+        :unavailable
+    end
+  rescue
+    _error -> :unavailable
+  end
+
+  defp read_stdio_char do
+    case :io.get_chars(:standard_io, ~c"", 1) do
+      :eof -> :eof
+      {:error, reason} -> {:error, reason}
+      chars -> {:ok, IO.chardata_to_string(chars)}
+    end
+  end
+
+  defp windows?, do: match?({:win32, _}, :os.type())
+
+  defp input_loop(read) do
+    case read.() do
       {:ok, <<9>>} ->
         ConsoleSubscriber.toggle_view()
-        input_loop(device)
+        input_loop(read)
 
       {:ok, <<3>>} ->
         :quit
 
       {:ok, <<27>>} ->
-        handle_escape(device)
-        input_loop(device)
+        handle_escape(read)
+        input_loop(read)
 
       {:ok, <<?k>>} ->
         ConsoleSubscriber.scroll(:up)
-        input_loop(device)
+        input_loop(read)
 
       {:ok, <<?j>>} ->
         ConsoleSubscriber.scroll(:down)
-        input_loop(device)
+        input_loop(read)
 
       {:ok, _key} ->
-        input_loop(device)
+        input_loop(read)
 
       {:error, _reason} ->
         :quit
@@ -91,9 +135,9 @@ defmodule ExPingNext.TerminalInput do
     end
   end
 
-  defp handle_escape(device) do
-    with {:ok, <<"[">>} <- :file.read(device, 1),
-         {:ok, direction} <- :file.read(device, 1) do
+  defp handle_escape(read) do
+    with {:ok, <<"[">>} <- read.(),
+         {:ok, direction} <- read.() do
       case direction do
         <<?A>> -> ConsoleSubscriber.scroll(:up)
         <<?B>> -> ConsoleSubscriber.scroll(:down)

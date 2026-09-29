@@ -111,25 +111,28 @@ defmodule ExPingNext.ConsoleSubscriber do
     %{state | statistics: Statistics.record(state.statistics, host, item, result)}
   end
 
+  # raw mode では "\n" が "\r\n" に変換されない端末（Windows）があるため、"\r\n" を明示する。
   defp print_result(host, item, {:ok, rtt_ms}) do
-    IO.puts([
+    IO.write([
       timestamp(),
       " | ",
       format_label(host, item),
       status_tag(:ok),
       " ",
-      :io_lib.format("~7.2f ms", [rtt_ms])
+      :io_lib.format("~7.2f ms", [rtt_ms]),
+      "\r\n"
     ])
   end
 
   defp print_result(host, item, {:error, reason}) do
-    IO.puts([
+    IO.write([
       timestamp(),
       " | ",
       format_label(host, item),
       status_tag(:ng),
       " ",
-      reason
+      reason,
+      "\r\n"
     ])
   end
 
