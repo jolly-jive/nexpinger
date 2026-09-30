@@ -1,15 +1,16 @@
 defmodule NexPinger.CLI do
   @moduledoc """
   escript のエントリポイント。
-  使い方: nexpinger [--log-file PATH] [--no-stdout] [--help] [設定ファイルパス...]
+  使い方: nexpinger [--log-file PATH [--log-format FORMAT]] [--no-stdout] [--help] [設定ファイルパス...]
   """
 
-  alias NexPinger.{Config, ConsoleSubscriber, Prober, Runner, TerminalInput}
+  alias NexPinger.{Config, ConsoleSubscriber, FileSubscriber, Prober, Runner, TerminalInput}
 
   @usage """
   Usage: nexpinger [options] <config file>...
 
     --log-file PATH     write monitoring results to a log file
+    --log-format FORMAT log file format: text, tsv or jsonl (default: text)
     --no-stdout         disable console output
     --stats-window N    use the last N attempts for RTT statistics (default: 1000)
     --stats-width N     use an 80- or 120-column statistics layout
@@ -23,6 +24,7 @@ defmodule NexPinger.CLI do
     OptionParser.parse(argv,
       strict: [
         log_file: :string,
+        log_format: :string,
         no_stdout: :boolean,
         stats_window: :integer,
         stats_width: :integer,
@@ -44,6 +46,16 @@ defmodule NexPinger.CLI do
 
     validate_stats_options!(opts)
 
+    log_format =
+      case log_format(opts) do
+        {:ok, format} ->
+          format
+
+        {:error, message} ->
+          IO.puts(:stderr, message)
+          System.halt(1)
+      end
+
     if Keyword.get(opts, :help, false) do
       IO.puts(@usage)
       System.halt(0)
@@ -64,11 +76,32 @@ defmodule NexPinger.CLI do
         System.halt(1)
 
       paths ->
-        run(paths, log_file, stdout_enabled, stats_window, requested_stats_width)
+        run(paths, log_file, log_format, stdout_enabled, stats_window, requested_stats_width)
     end
   end
 
-  defp run(paths, log_file, stdout_enabled, stats_window, requested_stats_width) do
+  @doc """
+  `--log-format` を検証し、ファイル出力形式を返す。`--log-file` 無しでの指定はエラーとする。
+  """
+  @spec log_format(keyword()) :: {:ok, FileSubscriber.format()} | {:error, String.t()}
+  def log_format(opts) do
+    names = Enum.map(FileSubscriber.formats(), &Atom.to_string/1)
+
+    case {Keyword.get(opts, :log_format), Keyword.get(opts, :log_file)} do
+      {nil, _log_file} ->
+        {:ok, :text}
+
+      {_format, nil} ->
+        {:error, "--log-format は --log-file と併せて指定してください"}
+
+      {format, _log_file} ->
+        if format in names,
+          do: {:ok, String.to_existing_atom(format)},
+          else: {:error, "--log-format は #{Enum.join(names, ", ")} のいずれかを指定してください"}
+    end
+  end
+
+  defp run(paths, log_file, log_format, stdout_enabled, stats_window, requested_stats_width) do
     case load_hosts(paths) do
       {:ok, []} ->
         IO.puts(:stderr, "設定ファイルに監視対象ホストが1件もありません: #{Enum.join(paths, ", ")}")
@@ -87,7 +120,7 @@ defmodule NexPinger.CLI do
         )
 
         if log_file do
-          IO.puts("ログ出力: #{log_file}")
+          IO.puts("ログ出力: #{log_file} (#{log_format})")
         end
 
         IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
@@ -99,7 +132,7 @@ defmodule NexPinger.CLI do
         IO.puts(String.duplicate("-", 60))
 
         if log_file do
-          start_log_file_subscriber(log_file)
+          start_log_file_subscriber(log_file, log_format)
         end
 
         if stdout_enabled do
@@ -170,10 +203,10 @@ defmodule NexPinger.CLI do
     end
   end
 
-  defp start_log_file_subscriber(log_file) do
+  defp start_log_file_subscriber(log_file, log_format) do
     case Process.whereis(:log_file_subscriber) do
       nil ->
-        NexPinger.FileSubscriber.start_link(log_file, :log_file_subscriber)
+        FileSubscriber.start_link(log_file, :log_file_subscriber, nil, log_format)
         NexPinger.Broadcaster.subscribe(:log_file_subscriber)
 
       _pid ->

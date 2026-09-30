@@ -40,6 +40,41 @@ defmodule NexPinger.CLITest do
              NexPinger.CLI.parse_options(["--ping-command", "config/hosts.yml"])
   end
 
+  test "parses the log format option" do
+    assert {[log_file: "monitor.tsv", log_format: "tsv"], ["config/hosts.yml"], []} =
+             NexPinger.CLI.parse_options([
+               "--log-file",
+               "monitor.tsv",
+               "--log-format",
+               "tsv",
+               "config/hosts.yml"
+             ])
+  end
+
+  test "defaults the log format to text" do
+    assert {:ok, :text} = NexPinger.CLI.log_format([])
+    assert {:ok, :text} = NexPinger.CLI.log_format(log_file: "monitor.log")
+  end
+
+  test "accepts text, tsv and jsonl log formats" do
+    for format <- [:text, :tsv, :jsonl] do
+      assert {:ok, ^format} =
+               NexPinger.CLI.log_format(log_file: "monitor.log", log_format: "#{format}")
+    end
+  end
+
+  test "rejects an unknown log format" do
+    assert {:error, message} =
+             NexPinger.CLI.log_format(log_file: "monitor.log", log_format: "csv")
+
+    assert message =~ "text, tsv, jsonl"
+  end
+
+  test "rejects a log format without a log file" do
+    assert {:error, message} = NexPinger.CLI.log_format(log_format: "tsv")
+    assert message =~ "--log-file"
+  end
+
   test "returns invalid options" do
     assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
              NexPinger.CLI.parse_options(["--unknown", "config/hosts.yml"])

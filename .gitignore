@@ -2,6 +2,7 @@
 /burrito_out/
 /priv/bin/icmp_helper.exe
 /priv/bin/*.pdb
+/tmp/
 
 # --- Elixir (GitHub official) ---
 /_build/ 

@@ -5,7 +5,7 @@ defmodule NexPinger.ConsoleSubscriber do
 
   use GenServer
 
-  alias NexPinger.{Host, Item, Statistics, StatisticsView}
+  alias NexPinger.{Host, Item, Statistics, StatisticsView, Timestamp}
 
   @default_stats_window 1000
   @default_stats_width 80
@@ -199,9 +199,5 @@ defmodule NexPinger.ConsoleSubscriber do
   defp status_tag(:ok), do: IO.ANSI.green() <> "OK " <> IO.ANSI.reset()
   defp status_tag(:ng), do: IO.ANSI.red() <> "NG " <> IO.ANSI.reset()
 
-  defp timestamp do
-    NaiveDateTime.utc_now()
-    |> NaiveDateTime.truncate(:millisecond)
-    |> NaiveDateTime.to_string()
-  end
+  defp timestamp, do: Timestamp.now()
 end

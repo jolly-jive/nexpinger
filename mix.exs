@@ -59,7 +59,7 @@ defmodule NexPinger.MixProject do
     [
       app: :nexpinger,
       version: "0.1.0",
-      elixir: "~> 1.15",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       compilers: Mix.compilers() ++ [:icmp_helper],
       deps: deps(),
