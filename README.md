@@ -6,7 +6,10 @@ ExPing 後継プロジェクトの Elixir 実装。TTY では「Ping結果」と
 
 - YAML設定ファイルからホストと監視項目（Item）を読み込み
 - Item ごとに独立した間隔（interval）でループ監視
-- ICMP Ping（OSの `ping` コマンドを実行、特権不要）
+- ICMP Ping（特権不要）
+  - Linux: ICMP datagram ソケットで直接送信。`net.ipv4.ping_group_range` に実行ユーザーのグループが含まれていない場合は `LC_ALL=C` を付けた `ping` コマンドにフォールバック
+    （有効にする例: `sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`）
+  - その他の OS: OS の `ping` コマンドを実行
 - TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測）
 - 1行1項目のストリーム出力（成功=緑 OK / 失敗=赤 NG）
 - TTY で `Tab` を押すと Ping結果の追記表示と Ping統計を切り替え

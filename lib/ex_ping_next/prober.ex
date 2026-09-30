@@ -1,11 +1,13 @@
 defmodule ExPingNext.Prober do
   @moduledoc """
   1回分の疎通確認を実行する。
-  ICMP は OS の ping コマンドを呼び出す方式（特権不要）。
+  ICMP は特権不要の方式で送る。
+    * Linux: ICMP datagram ソケット（`ExPingNext.IcmpSocket`）。使えなければ ping コマンド
+    * その他: OS の ping コマンド
   TCP は :gen_tcp.connect の成否とRTTを計測する。
   """
 
-  alias ExPingNext.{Host, Item}
+  alias ExPingNext.{Host, IcmpSocket, Item}
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, reason :: String.t()}
 
@@ -13,12 +15,44 @@ defmodule ExPingNext.Prober do
   def probe(%Host{} = host, %Item{type: :icmp} = item), do: icmp_probe(host, item)
   def probe(%Host{} = host, %Item{type: :tcp} = item), do: tcp_probe(host, item)
 
+  @doc """
+  この環境で ICMP 監視に使う方法を英語で返す（起動時の表示用）。
+  """
+  @spec icmp_method() :: String.t()
+  def icmp_method do
+    case :os.type() do
+      {:unix, :linux} ->
+        case IcmpSocket.availability() do
+          :ok -> "ICMP socket"
+          {:error, reason} -> "ping command (fallback: #{reason})"
+        end
+
+      _ ->
+        "ping command"
+    end
+  end
+
   # ---- ICMP ----------------------------------------------------------
 
   defp icmp_probe(%Host{address: address}, %Item{timeout: timeout}) do
+    case :os.type() do
+      {:unix, :linux} ->
+        case IcmpSocket.ping(address, timeout) do
+          {:error, :unavailable} -> ping_command_probe(address, timeout)
+          result -> result
+        end
+
+      _ ->
+        ping_command_probe(address, timeout)
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  defp ping_command_probe(address, timeout) do
     args = icmp_args(address, timeout)
 
-    task = Task.async(fn -> System.cmd("ping", args, stderr_to_stdout: true) end)
+    task = Task.async(fn -> System.cmd("ping", args, ping_cmd_opts()) end)
 
     case Task.yield(task, timeout + 500) || Task.shutdown(task, :brutal_kill) do
       {:ok, {output, 0}} ->
@@ -30,8 +64,14 @@ defmodule ExPingNext.Prober do
       nil ->
         {:error, "timeout"}
     end
-  rescue
-    e -> {:error, Exception.message(e)}
+  end
+
+  # Unix では出力を英語・小数点 "." に固定する（LANG によって "time=" の翻訳や "0,045" になるのを防ぐ）
+  defp ping_cmd_opts do
+    case :os.type() do
+      {:unix, _} -> [stderr_to_stdout: true, env: [{"LC_ALL", "C"}]]
+      _ -> [stderr_to_stdout: true]
+    end
   end
 
   defp icmp_args(address, timeout_ms) do

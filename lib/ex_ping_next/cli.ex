@@ -4,7 +4,7 @@ defmodule ExPingNext.CLI do
   使い方: exping_next [--log-file PATH] [--no-stdout] [--help] [設定ファイルパス...]
   """
 
-  alias ExPingNext.{Config, ConsoleSubscriber, Runner, TerminalInput}
+  alias ExPingNext.{Config, ConsoleSubscriber, Prober, Runner, TerminalInput}
 
   @usage """
   Usage: exping_next [options] <config file>...
@@ -85,6 +85,11 @@ defmodule ExPingNext.CLI do
         end
 
         IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
+
+        if Enum.any?(hosts, fn host -> Enum.any?(host.items, &(&1.type == :icmp)) end) do
+          IO.puts("ICMP: #{Prober.icmp_method()}")
+        end
+
         IO.puts(String.duplicate("-", 60))
 
         if log_file do
