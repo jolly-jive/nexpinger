@@ -10,6 +10,12 @@ defmodule NexPinger.ConsoleSubscriber do
   @default_stats_window 1000
   @default_stats_width 80
   @default_stats_height 24
+  # 統計画面の再描画間隔（ミリ秒）。監視結果ごとには描画せず、この間隔でまとめて描画する。
+  @stats_render_interval 100
+
+  # 統計画面は代替スクリーンバッファに表示し、表示中はカーソルを隠す
+  @enter_stats_screen "\e[?1049h\e[?25l\e[2J\e[H"
+  @leave_stats_screen "\e[?25h\e[?1049l"
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -31,7 +37,9 @@ defmodule NexPinger.ConsoleSubscriber do
        stats_width: @default_stats_width,
        stats_height: @default_stats_height,
        mode: :results,
-       offset: 0
+       offset: 0,
+       stats_dirty: false,
+       render_scheduled: false
      }}
   end
 
@@ -49,7 +57,7 @@ defmodule NexPinger.ConsoleSubscriber do
   end
 
   def handle_call(:end_stats_view, _from, %{mode: :stats} = state) do
-    IO.write("\e[?1049l")
+    IO.write(@leave_stats_screen)
     {:reply, :ok, %{state | mode: :results}}
   end
 
@@ -57,14 +65,13 @@ defmodule NexPinger.ConsoleSubscriber do
 
   @impl true
   def handle_cast(:toggle_view, %{mode: :results} = state) do
-    IO.write("\e[?1049h\e[2J\e[H")
-    state = %{state | mode: :stats, offset: 0}
-    render_stats(state)
+    IO.write(@enter_stats_screen)
+    state = render_stats(%{state | mode: :stats, offset: 0})
     {:noreply, state}
   end
 
   def handle_cast(:toggle_view, %{mode: :stats} = state) do
-    IO.write("\e[?1049l")
+    IO.write(@leave_stats_screen)
     {:noreply, %{state | mode: :results}}
   end
 
@@ -73,8 +80,7 @@ defmodule NexPinger.ConsoleSubscriber do
     entry_count = length(Statistics.entries(state.statistics))
     max_offset = StatisticsView.max_offset(entry_count, state.stats_width, state.stats_height)
     offset = min(max(state.offset + direction_offset, 0), max_offset)
-    state = %{state | offset: offset}
-    render_stats(state)
+    state = render_stats(%{state | offset: offset})
     {:noreply, state}
   end
 
@@ -84,11 +90,13 @@ defmodule NexPinger.ConsoleSubscriber do
   def handle_info({:item_result, %Host{} = host, %Item{} = item, {:ok, rtt_ms}}, state) do
     state = record_result(state, host, item, {:ok, rtt_ms})
 
-    if state.mode == :stats do
-      render_stats(state)
-    else
-      print_result(host, item, {:ok, rtt_ms})
-    end
+    state =
+      if state.mode == :stats do
+        schedule_stats_render(state)
+      else
+        print_result(host, item, {:ok, rtt_ms})
+        state
+      end
 
     {:noreply, state}
   end
@@ -98,17 +106,35 @@ defmodule NexPinger.ConsoleSubscriber do
 
     state = record_result(state, host, item, {:error, reason})
 
-    if state.mode == :stats do
-      render_stats(state)
-    else
-      print_result(host, item, {:error, reason})
-    end
+    state =
+      if state.mode == :stats do
+        schedule_stats_render(state)
+      else
+        print_result(host, item, {:error, reason})
+        state
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info(:render_stats, state) do
+    state = %{state | render_scheduled: false}
+
+    state =
+      if state.mode == :stats and state.stats_dirty, do: render_stats(state), else: state
 
     {:noreply, state}
   end
 
   defp record_result(state, host, item, result) do
     %{state | statistics: Statistics.record(state.statistics, host, item, result)}
+  end
+
+  defp schedule_stats_render(%{render_scheduled: true} = state), do: %{state | stats_dirty: true}
+
+  defp schedule_stats_render(state) do
+    Process.send_after(self(), :render_stats, @stats_render_interval)
+    %{state | stats_dirty: true, render_scheduled: true}
   end
 
   # raw mode では "\n" が "\r\n" に変換されない端末（Windows）があるため、"\r\n" を明示する。
@@ -136,12 +162,16 @@ defmodule NexPinger.ConsoleSubscriber do
     ])
   end
 
+  # 画面を消去してから描くと空白の瞬間が見えてちらつくため、
+  # カーソルを左上に戻して上書きし、行末と画面の残りだけを消す。1回の書き込みで出力する。
   defp render_stats(state) do
-    IO.write("\e[2J\e[H")
+    frame =
+      state.statistics
+      |> StatisticsView.render(state.stats_width, state.stats_height, state.offset)
+      |> String.replace("\r\n", "\e[K\r\n")
 
-    IO.write(
-      StatisticsView.render(state.statistics, state.stats_width, state.stats_height, state.offset)
-    )
+    IO.write(["\e[H", frame, "\e[J"])
+    %{state | stats_dirty: false}
   end
 
   defp format_label(%Host{name: name, address: address} = host, %Item{
