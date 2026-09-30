@@ -193,3 +193,7 @@ timestamp	host	address	mac	item	type	port	status	rtt_ms	error
 - ARP/PING組み合わせ表示（同一サブネット判定含む4パターン）
 - フルスクリーン表示型CUI
 - GUI版
+
+## ライセンス
+
+[Apache License 2.0](LICENSE) で公開しています。
