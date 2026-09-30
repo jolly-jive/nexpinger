@@ -6,7 +6,7 @@ defmodule NexPinger.FileSubscriberTest do
   @timestamp "2026-09-30 12:00:00.123"
 
   defp tcp_host,
-    do: %Host{name: "web", address: "192.0.2.10", mac_address: "08:33:ed:8f:c1:f2", items: []}
+    do: %Host{name: "web", address: "192.0.2.10", mac_address: "00:00:5e:00:53:01", items: []}
 
   defp tcp_item, do: %Item{name: "https", type: :tcp, port: 443}
   defp icmp_host, do: %Host{name: "gateway", address: "192.0.2.1", items: []}
@@ -22,7 +22,7 @@ defmodule NexPinger.FileSubscriberTest do
     test "keeps the fixed-width console layout" do
       assert record(:text, tcp_host(), tcp_item(), {:ok, 45.671}) ==
                "2026-09-30 12:00:00.123 | web/https:443           (192.0.2.10     ) " <>
-                 "08:33:ed:8f:c1:f2 TCP  OK    45.67 ms\n"
+                 "00:00:5e:00:53:01 TCP  OK    45.67 ms\n"
 
       assert record(:text, icmp_host(), icmp_item(), {:error, "timeout"}) =~
                ~r/ICMP NG  timeout\n$/
@@ -32,7 +32,7 @@ defmodule NexPinger.FileSubscriberTest do
   describe "tsv format" do
     test "writes raw values separated by tabs" do
       assert record(:tsv, tcp_host(), tcp_item(), {:ok, 45.671}) ==
-               "2026-09-30 12:00:00.123\tweb\t192.0.2.10\t08:33:ed:8f:c1:f2\thttps\ttcp\t443\tok\t45.671\t\n"
+               "2026-09-30 12:00:00.123\tweb\t192.0.2.10\t00:00:5e:00:53:01\thttps\ttcp\t443\tok\t45.671\t\n"
     end
 
     test "leaves missing values empty" do
@@ -63,7 +63,7 @@ defmodule NexPinger.FileSubscriberTest do
                "timestamp" => @timestamp,
                "host" => "web",
                "address" => "192.0.2.10",
-               "mac" => "08:33:ed:8f:c1:f2",
+               "mac" => "00:00:5e:00:53:01",
                "item" => "https",
                "type" => "tcp",
                "port" => 443,

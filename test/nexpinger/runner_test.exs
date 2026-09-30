@@ -116,7 +116,7 @@ defmodule NexPinger.RunnerTest do
       name: "with-mac",
       address: "192.168.0.1",
       items: [],
-      mac_address: "08:33:ed:8f:c1:f2"
+      mac_address: "00:00:5e:00:53:01"
     }
 
     item = %Item{name: "icmp", type: :icmp}
@@ -136,7 +136,7 @@ defmodule NexPinger.RunnerTest do
     assert_receive {:file_written, ^no_mac_path}
     {:ok, mac_line} = File.read(mac_path)
     {:ok, no_mac_line} = File.read(no_mac_path)
-    assert mac_line =~ ") 08:33:ed:8f:c1:f2 ICMP"
+    assert mac_line =~ ") 00:00:5e:00:53:01 ICMP"
     assert no_mac_line =~ ")                   ICMP"
   end
 end

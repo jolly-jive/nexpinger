@@ -149,7 +149,7 @@ hosts:
 ## 出力例
 
 ```
-2026-09-16 12:00:00.123 | gateway/ping             (192.168.1.1    ) 08:33:ed:8f:c1:f2 ICMP OK    1.23 ms
+2026-09-16 12:00:00.123 | gateway/ping             (192.168.1.1    ) 00:00:5e:00:53:01 ICMP OK    1.23 ms
 2026-09-16 12:00:01.456 | web-server/https:443      (example.com    )                   TCP  OK   45.67 ms
 2026-09-16 12:00:02.789 | dns-server/ping           (192.168.1.10   )                   ICMP NG    timeout
 ```
@@ -180,7 +180,7 @@ hosts:
 
 ```text
 timestamp	host	address	mac	item	type	port	status	rtt_ms	error
-2026-09-16 12:00:00.123	gateway	192.168.1.1	08:33:ed:8f:c1:f2	ping	icmp		ok	1.23	
+2026-09-16 12:00:00.123	gateway	192.168.1.1	00:00:5e:00:53:01	ping	icmp		ok	1.23	
 2026-09-16 12:00:02.789	dns-server	192.168.1.10		ping	icmp		ng		timeout
 ```
 
