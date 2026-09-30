@@ -1,7 +1,7 @@
-defmodule ExPingNext.StatisticsTest do
+defmodule NexPinger.StatisticsTest do
   use ExUnit.Case, async: true
 
-  alias ExPingNext.{Host, Item, Statistics}
+  alias NexPinger.{Host, Item, Statistics}
 
   test "keeps cumulative counts and calculates latency from successful results in the latest attempts" do
     host = %Host{name: "gateway", address: "192.0.2.1", items: []}

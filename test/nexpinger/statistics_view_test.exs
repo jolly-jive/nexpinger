@@ -1,7 +1,7 @@
-defmodule ExPingNext.StatisticsViewTest do
+defmodule NexPinger.StatisticsViewTest do
   use ExUnit.Case, async: true
 
-  alias ExPingNext.{Host, Item, Statistics, StatisticsView}
+  alias NexPinger.{Host, Item, Statistics, StatisticsView}
 
   test "renders the configured columns within 80 and 120 characters" do
     host = %Host{name: "web", address: "192.0.2.1", items: []}

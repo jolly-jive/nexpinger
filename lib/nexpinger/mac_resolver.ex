@@ -1,4 +1,4 @@
-defmodule ExPingNext.MacResolver do
+defmodule NexPinger.MacResolver do
   @moduledoc """
   同一 IPv4 サブネット上のホストについて、近隣テーブルから MAC アドレスを取得する。
   """

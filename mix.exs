@@ -35,8 +35,8 @@ defmodule Mix.Tasks.Compile.IcmpHelper do
     # WSL で /mnt/c 配下に Zig のキャッシュを置くと失敗するため、既定では一時ディレクトリを使う
     env =
       for {name, dir} <- [
-            {"ZIG_LOCAL_CACHE_DIR", "zig-cache-exping-next"},
-            {"ZIG_GLOBAL_CACHE_DIR", "zig-global-cache-exping-next"}
+            {"ZIG_LOCAL_CACHE_DIR", "zig-cache-nexpinger"},
+            {"ZIG_GLOBAL_CACHE_DIR", "zig-global-cache-nexpinger"}
           ],
           System.get_env(name) == nil,
           do: {name, Path.join(System.tmp_dir!(), dir)}
@@ -52,12 +52,12 @@ defmodule Mix.Tasks.Compile.IcmpHelper do
   end
 end
 
-defmodule ExPingNext.MixProject do
+defmodule NexPinger.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :ex_ping_next,
+      app: :nexpinger,
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
@@ -71,7 +71,7 @@ defmodule ExPingNext.MixProject do
   def application do
     [
       extra_applications: [:logger, :eex],
-      mod: {ExPingNext.Application, []}
+      mod: {NexPinger.Application, []}
     ]
   end
 
@@ -83,12 +83,12 @@ defmodule ExPingNext.MixProject do
   end
 
   defp escript do
-    [main_module: ExPingNext.CLI, name: "exping_next"]
+    [main_module: NexPinger.CLI, name: "nexpinger"]
   end
 
   defp releases do
     [
-      exping_next: [
+      nexpinger: [
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
           targets: [

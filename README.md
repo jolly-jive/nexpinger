@@ -1,6 +1,6 @@
-# ExPing Next (Elixir CUI版)
+# NexPinger (Elixir CUI版)
 
-ExPing 後継プロジェクトの Elixir 実装。TTY では「Ping結果」と「Ping統計」を切り替えて表示できます。
+複数のホストを ICMP / TCP で継続監視する、Elixir 製の CUI ツール。TTY では「Ping結果」と「Ping統計」を切り替えて表示できます。
 
 ## 機能（現時点）
 
@@ -34,27 +34,27 @@ mix deps.get
 ### 1. mix経由で直接実行
 
 ```bash
-mix run --no-halt -e 'ExPingNext.CLI.main(["config/hosts.yml"])'
+mix run --no-halt -e 'NexPinger.CLI.main(["config/hosts.yml"])'
 ```
 
 ### 1a. オプション付きで実行
 
 ```bash
-mix run --no-halt -e 'ExPingNext.CLI.main(["--log-file", "/tmp/exping.log", "config/hosts.yml"])'
-mix run --no-halt -e 'ExPingNext.CLI.main(["--no-stdout", "--log-file", "/tmp/exping.log", "config/hosts.yml"])'
-mix run --no-halt -e 'ExPingNext.CLI.main(["--stats-window", "500", "--stats-width", "120", "config/hosts.yml"])'
-mix run --no-halt -e 'ExPingNext.CLI.main(["--help"])'
+mix run --no-halt -e 'NexPinger.CLI.main(["--log-file", "/tmp/nexpinger.log", "config/hosts.yml"])'
+mix run --no-halt -e 'NexPinger.CLI.main(["--no-stdout", "--log-file", "/tmp/nexpinger.log", "config/hosts.yml"])'
+mix run --no-halt -e 'NexPinger.CLI.main(["--stats-window", "500", "--stats-width", "120", "config/hosts.yml"])'
+mix run --no-halt -e 'NexPinger.CLI.main(["--help"])'
 ```
 
 ### 2. escriptとしてビルドして実行
 
 ```bash
 mix escript.build
-./exping_next config/hosts.yml
-./exping_next --log-file /tmp/exping.log config/hosts.yml
-./exping_next --no-stdout --log-file /tmp/exping.log config/hosts.yml
-./exping_next --stats-window 500 --stats-width 120 config/hosts.yml
-./exping_next --help
+./nexpinger config/hosts.yml
+./nexpinger --log-file /tmp/nexpinger.log config/hosts.yml
+./nexpinger --no-stdout --log-file /tmp/nexpinger.log config/hosts.yml
+./nexpinger --stats-window 500 --stats-width 120 config/hosts.yml
+./nexpinger --help
 ```
 
 ### 3. Burrito で単体実行ファイルとしてビルドして実行
@@ -67,12 +67,12 @@ Windows 用の補助プログラム `priv/bin/icmp_helper.exe`（ソースは `c
 `zig` が無い環境ではビルドを省略する（その場合 Windows では `ping.exe` を使う）。
 
 ```bash
-ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-exping-next MIX_ENV=prod BURRITO_TARGET=windows mix release
+ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=windows mix release
 ```
 
 ```powershell
-.\burrito_out\exping_next_windows.exe --help
-.\burrito_out\exping_next_windows.exe config\hosts.yml
+.\burrito_out\nexpinger_windows.exe --help
+.\burrito_out\nexpinger_windows.exe config\hosts.yml
 ```
 
 ## CLI オプション
@@ -94,7 +94,7 @@ TTY では `Tab` で Ping結果と Ping統計を切り替え、統計画面で�
 例:
 
 ```bash
-./exping_next --log-file ./monitor.log --no-stdout config/hosts.yml
+./nexpinger --log-file ./monitor.log --no-stdout config/hosts.yml
 ```
 
 この場合、ファイルへ記録される一方で標準出力には結果が表示されません。

@@ -1,4 +1,4 @@
-defmodule ExPingNext.IcmpSocket do
+defmodule NexPinger.IcmpSocket do
   @moduledoc """
   Linux の特権不要 ICMP ソケット（SOCK_DGRAM + IPPROTO_ICMP / IPPROTO_ICMPV6）で
   Echo を 1 回送り、RTT を計測する。

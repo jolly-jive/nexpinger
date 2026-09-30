@@ -1,9 +1,9 @@
-defmodule ExPingNext.Config do
+defmodule NexPinger.Config do
   @moduledoc """
-  YAML または hosts 形式の設定ファイルを読み込み、ExPingNext.Host のリストに変換する。
+  YAML または hosts 形式の設定ファイルを読み込み、NexPinger.Host のリストに変換する。
   """
 
-  alias ExPingNext.{Host, Item}
+  alias NexPinger.{Host, Item}
 
   @spec load(String.t()) :: {:ok, [Host.t()]} | {:error, term()}
   def load(path) do

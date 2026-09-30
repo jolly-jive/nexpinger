@@ -1,4 +1,4 @@
-defmodule ExPingNext.Application do
+defmodule NexPinger.Application do
   @moduledoc false
 
   use Application
@@ -6,17 +6,17 @@ defmodule ExPingNext.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      {Registry, keys: :unique, name: ExPingNext.MonitorRegistry},
+      {Registry, keys: :unique, name: NexPinger.MonitorRegistry},
       {DynamicSupervisor,
        strategy: :one_for_one,
-       name: ExPingNext.MonitorSupervisor},
-      ExPingNext.Broadcaster,
-      ExPingNext.ConsoleSubscriber,
-      ExPingNext.IcmpHelper
+       name: NexPinger.MonitorSupervisor},
+      NexPinger.Broadcaster,
+      NexPinger.ConsoleSubscriber,
+      NexPinger.IcmpHelper
     ]
 
     {:ok, supervisor} =
-      Supervisor.start_link(children, strategy: :one_for_one, name: ExPingNext.Supervisor)
+      Supervisor.start_link(children, strategy: :one_for_one, name: NexPinger.Supervisor)
 
     # Burrito（mix release）では escript の main_module が呼ばれないため、ここで CLI を起動する。
     # escript 実行時は escript 側が CLI.main/1 を呼ぶので何もしない。
@@ -27,7 +27,7 @@ defmodule ExPingNext.Application do
     # それを避けるため、CLI.main/1 は start/2 の中で同期的に実行し、終了は System.halt/1 で行う。
     if burrito?() do
       argv = :init.get_plain_arguments() |> Enum.map(&to_string/1)
-      ExPingNext.CLI.main(argv)
+      NexPinger.CLI.main(argv)
     end
 
     {:ok, supervisor}

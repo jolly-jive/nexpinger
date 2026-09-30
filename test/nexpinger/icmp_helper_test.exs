@@ -1,8 +1,8 @@
-defmodule ExPingNext.IcmpHelperTest do
+defmodule NexPinger.IcmpHelperTest do
   # アプリが起動した名前付きプロセスとアプリ環境を差し替えるため async にしない
   use ExUnit.Case, async: false
 
-  alias ExPingNext.IcmpHelper
+  alias NexPinger.IcmpHelper
 
   # 偽の補助プログラムはシェルスクリプトで作るため Unix でのみ実行する
   @moduletag skip: match?({:win32, _}, :os.type()) && "requires a Unix shell"
@@ -31,11 +31,11 @@ defmodule ExPingNext.IcmpHelperTest do
     File.write!(path, context[:script] || @fake_helper)
     File.chmod!(path, 0o755)
 
-    Application.put_env(:ex_ping_next, :icmp_helper_path, path)
+    Application.put_env(:nexpinger, :icmp_helper_path, path)
     restart_helper()
 
     on_exit(fn ->
-      Application.delete_env(:ex_ping_next, :icmp_helper_path)
+      Application.delete_env(:nexpinger, :icmp_helper_path)
       restart_helper()
       File.rm_rf!(dir)
     end)
@@ -44,8 +44,8 @@ defmodule ExPingNext.IcmpHelperTest do
   end
 
   defp restart_helper do
-    :ok = Supervisor.terminate_child(ExPingNext.Supervisor, IcmpHelper)
-    {:ok, _pid} = Supervisor.restart_child(ExPingNext.Supervisor, IcmpHelper)
+    :ok = Supervisor.terminate_child(NexPinger.Supervisor, IcmpHelper)
+    {:ok, _pid} = Supervisor.restart_child(NexPinger.Supervisor, IcmpHelper)
   end
 
   test "returns the RTT and errors reported by the helper" do
@@ -74,7 +74,7 @@ defmodule ExPingNext.IcmpHelperTest do
   end
 
   test "reports unavailable when the helper does not exist" do
-    Application.put_env(:ex_ping_next, :icmp_helper_path, "/nonexistent/icmp_helper.exe")
+    Application.put_env(:nexpinger, :icmp_helper_path, "/nonexistent/icmp_helper.exe")
 
     assert IcmpHelper.ping("192.0.2.1", 1000) == {:error, :unavailable}
     assert IcmpHelper.availability() == {:error, "icmp_helper.exe not found"}

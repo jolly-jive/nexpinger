@@ -1,9 +1,9 @@
-defmodule ExPingNext.Host do
+defmodule NexPinger.Host do
   @moduledoc """
   監視対象ホストと、そのホスト上の監視項目を保持する構造体。
   """
 
-  alias ExPingNext.Item
+  alias NexPinger.Item
 
   @enforce_keys [:name, :address, :items]
   defstruct name: nil,

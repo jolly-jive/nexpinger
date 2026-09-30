@@ -1,11 +1,11 @@
-defmodule ExPingNext.Broadcaster do
+defmodule NexPinger.Broadcaster do
   @moduledoc """
   監視結果を複数の subscriber へ配信するイベントハブ。
   """
 
   use GenServer
 
-  alias ExPingNext.{Host, Item}
+  alias NexPinger.{Host, Item}
 
   @type event :: {:ok, float()} | {:error, String.t()}
   @type subscriber :: pid() | atom()

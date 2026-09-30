@@ -1,10 +1,10 @@
-defmodule ExPingNext.TerminalInput do
+defmodule NexPinger.TerminalInput do
   @moduledoc """
   TTY が利用可能なとき、raw mode で統計画面のキー入力を処理する。
   Unix では stty、Windows では OTP 26 以降の `:shell.start_interactive({:noshell, :raw})` を使う。
   """
 
-  alias ExPingNext.ConsoleSubscriber
+  alias NexPinger.ConsoleSubscriber
 
   def available? do
     if windows?(), do: windows_available?(), else: unix_available?()

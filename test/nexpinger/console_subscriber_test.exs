@@ -1,8 +1,8 @@
-defmodule ExPingNext.ConsoleSubscriberTest do
+defmodule NexPinger.ConsoleSubscriberTest do
   use ExUnit.Case, async: true
   import ExUnit.CaptureIO
 
-  alias ExPingNext.{ConsoleSubscriber, Host, Item}
+  alias NexPinger.{ConsoleSubscriber, Host, Item}
 
   test "beeps when an item result is an error" do
     host = %Host{name: "gateway", address: "192.0.2.1", items: []}

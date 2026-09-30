@@ -1,7 +1,7 @@
-defmodule ExPingNext.IcmpSocketTest do
+defmodule NexPinger.IcmpSocketTest do
   use ExUnit.Case, async: true
 
-  alias ExPingNext.IcmpSocket
+  alias NexPinger.IcmpSocket
 
   describe "build_packet/5 and checksum/1" do
     test "a packet with its checksum filled in verifies to zero" do

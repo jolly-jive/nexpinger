@@ -1,14 +1,14 @@
-defmodule ExPingNext.Prober do
+defmodule NexPinger.Prober do
   @moduledoc """
   1回分の疎通確認を実行する。
   ICMP は特権不要の方式で送る。
-    * Linux: ICMP datagram ソケット（`ExPingNext.IcmpSocket`）。使えなければ ping コマンド
-    * Windows: IcmpSendEcho2 を呼ぶ補助プログラム（`ExPingNext.IcmpHelper`）。使えなければ ping コマンド
+    * Linux: ICMP datagram ソケット（`NexPinger.IcmpSocket`）。使えなければ ping コマンド
+    * Windows: IcmpSendEcho2 を呼ぶ補助プログラム（`NexPinger.IcmpHelper`）。使えなければ ping コマンド
     * その他: OS の ping コマンド
   TCP は :gen_tcp.connect の成否とRTTを計測する。
   """
 
-  alias ExPingNext.{Host, IcmpHelper, IcmpSocket, Item}
+  alias NexPinger.{Host, IcmpHelper, IcmpSocket, Item}
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, reason :: String.t()}
 
@@ -46,9 +46,9 @@ defmodule ExPingNext.Prober do
   ICMP ソケットや補助プログラムを使わず、常に OS の ping コマンドを使うようにする（`--ping-command`）。
   """
   @spec force_ping_command() :: :ok
-  def force_ping_command, do: Application.put_env(:ex_ping_next, :force_ping_command, true)
+  def force_ping_command, do: Application.put_env(:nexpinger, :force_ping_command, true)
 
-  defp ping_command_forced?, do: Application.get_env(:ex_ping_next, :force_ping_command, false)
+  defp ping_command_forced?, do: Application.get_env(:nexpinger, :force_ping_command, false)
 
   # ---- ICMP ----------------------------------------------------------
 

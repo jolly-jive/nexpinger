@@ -1,11 +1,11 @@
-defmodule ExPingNext.FileSubscriber do
+defmodule NexPinger.FileSubscriber do
   @moduledoc """
   Broadcaster 経由で届いた監視結果をファイルへ書き込む subscriber.
   """
 
   use GenServer
 
-  alias ExPingNext.{Host, Item}
+  alias NexPinger.{Host, Item}
 
   def start_link(path \\ "monitor.log", name \\ __MODULE__, owner \\ nil) do
     GenServer.start_link(__MODULE__, {path, owner}, name: name)

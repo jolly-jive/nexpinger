@@ -1,7 +1,7 @@
-defmodule ExPingNext.ConfigTest do
+defmodule NexPinger.ConfigTest do
   use ExUnit.Case, async: true
 
-  alias ExPingNext.{Config, Item}
+  alias NexPinger.{Config, Item}
 
   test "loads multiple items for one host" do
     path =
@@ -67,7 +67,7 @@ defmodule ExPingNext.ConfigTest do
   end
 
   defp write_config!(content) do
-    path = Path.join(System.tmp_dir!(), "exping-config-#{System.unique_integer([:positive])}.yml")
+    path = Path.join(System.tmp_dir!(), "nexpinger-config-#{System.unique_integer([:positive])}.yml")
     File.write!(path, content)
     on_exit(fn -> File.rm(path) end)
     path

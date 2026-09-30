@@ -1,4 +1,4 @@
-defmodule ExPingNext.Item do
+defmodule NexPinger.Item do
   @moduledoc """
   ホスト上で実行する1つの監視項目。
   """

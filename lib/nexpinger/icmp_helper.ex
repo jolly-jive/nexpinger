@@ -1,4 +1,4 @@
-defmodule ExPingNext.IcmpHelper do
+defmodule NexPinger.IcmpHelper do
   @moduledoc """
   Windows 用。IcmpSendEcho2 / Icmp6SendEcho2 を呼ぶ補助プログラム
   （`priv/bin/icmp_helper.exe`、ソースは `c_src/icmp_helper.c`）をポートとして常駐させ、
@@ -8,7 +8,7 @@ defmodule ExPingNext.IcmpHelper do
   起動し直す。補助プログラムが無い、起動できない、一度も応答せずに終了した場合は
   `{:error, :unavailable}` を返す。呼び出し側はこのとき ping コマンドにフォールバックする。
 
-  補助プログラムのパスは `config :ex_ping_next, :icmp_helper_path` で差し替えられる（テスト用）。
+  補助プログラムのパスは `config :nexpinger, :icmp_helper_path` で差し替えられる（テスト用）。
 
   プロトコル（1 行 1 メッセージ、応答は完了順）:
 
@@ -61,8 +61,8 @@ defmodule ExPingNext.IcmpHelper do
 
   defp executable do
     path =
-      Application.get_env(:ex_ping_next, :icmp_helper_path) ||
-        Application.app_dir(:ex_ping_next, Path.join(["priv", "bin", @executable]))
+      Application.get_env(:nexpinger, :icmp_helper_path) ||
+        Application.app_dir(:nexpinger, Path.join(["priv", "bin", @executable]))
 
     if File.regular?(path),
       do: {:ok, path},

@@ -1,7 +1,7 @@
-defmodule ExPingNext.ProberTest do
+defmodule NexPinger.ProberTest do
   use ExUnit.Case, async: true
 
-  alias ExPingNext.Prober
+  alias NexPinger.Prober
 
   describe "parse_ping_time/2 on Windows" do
     @windows {:win32, :nt}

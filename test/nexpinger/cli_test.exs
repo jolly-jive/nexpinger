@@ -1,16 +1,16 @@
-defmodule ExPingNext.CLITest do
+defmodule NexPinger.CLITest do
   use ExUnit.Case, async: true
 
   test "parses a log file option" do
     assert {[
               log_file: "/tmp/monitor.log"
             ], ["config/hosts.yml"], []} =
-             ExPingNext.CLI.parse_options(["--log-file", "/tmp/monitor.log", "config/hosts.yml"])
+             NexPinger.CLI.parse_options(["--log-file", "/tmp/monitor.log", "config/hosts.yml"])
   end
 
   test "does not configure file output without a log file option" do
     assert {[], ["config/hosts.yml"], []} =
-             ExPingNext.CLI.parse_options(["config/hosts.yml"])
+             NexPinger.CLI.parse_options(["config/hosts.yml"])
   end
 
   test "parses no-stdout and help flags" do
@@ -18,7 +18,7 @@ defmodule ExPingNext.CLITest do
               no_stdout: true,
               help: true
             ], [], []} =
-             ExPingNext.CLI.parse_options(["--no-stdout", "--help"])
+             NexPinger.CLI.parse_options(["--no-stdout", "--help"])
   end
 
   test "parses RTT statistics window and width options" do
@@ -26,7 +26,7 @@ defmodule ExPingNext.CLITest do
               stats_window: 250,
               stats_width: 120
             ], ["config/hosts.yml"], []} =
-             ExPingNext.CLI.parse_options([
+             NexPinger.CLI.parse_options([
                "--stats-window",
                "250",
                "--stats-width",
@@ -37,11 +37,11 @@ defmodule ExPingNext.CLITest do
 
   test "parses the ping-command flag" do
     assert {[ping_command: true], ["config/hosts.yml"], []} =
-             ExPingNext.CLI.parse_options(["--ping-command", "config/hosts.yml"])
+             NexPinger.CLI.parse_options(["--ping-command", "config/hosts.yml"])
   end
 
   test "returns invalid options" do
     assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
-             ExPingNext.CLI.parse_options(["--unknown", "config/hosts.yml"])
+             NexPinger.CLI.parse_options(["--unknown", "config/hosts.yml"])
   end
 end

@@ -1,4 +1,4 @@
-defmodule ExPingNext.Runner do
+defmodule NexPinger.Runner do
   @moduledoc """
   ホスト上の1つの Item を監視するアクター。
   Item ごとに独立したプロセスが interval ごとに probe を実行する。
@@ -6,7 +6,7 @@ defmodule ExPingNext.Runner do
 
   use GenServer
 
-  alias ExPingNext.{Broadcaster, Host, Item, MacResolver, Prober}
+  alias NexPinger.{Broadcaster, Host, Item, MacResolver, Prober}
 
   @type state :: %{
           host: Host.t(),
@@ -44,6 +44,6 @@ defmodule ExPingNext.Runner do
   end
 
   defp via_name(host_name, item_name) do
-    {:via, Registry, {ExPingNext.MonitorRegistry, {host_name, item_name}}}
+    {:via, Registry, {NexPinger.MonitorRegistry, {host_name, item_name}}}
   end
 end

@@ -1,7 +1,7 @@
-defmodule ExPingNext.MacResolverTest do
+defmodule NexPinger.MacResolverTest do
   use ExUnit.Case, async: true
 
-  alias ExPingNext.MacResolver
+  alias NexPinger.MacResolver
 
   @interfaces [
     {{192, 168, 0, 130}, {192, 168, 0, 255}, {255, 255, 255, 0}}

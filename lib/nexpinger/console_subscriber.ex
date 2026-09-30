@@ -1,11 +1,11 @@
-defmodule ExPingNext.ConsoleSubscriber do
+defmodule NexPinger.ConsoleSubscriber do
   @moduledoc """
   Broadcaster 経由で届いた監視結果をコンソールに出力する subscriber.
   """
 
   use GenServer
 
-  alias ExPingNext.{Host, Item, Statistics, StatisticsView}
+  alias NexPinger.{Host, Item, Statistics, StatisticsView}
 
   @default_stats_window 1000
   @default_stats_width 80

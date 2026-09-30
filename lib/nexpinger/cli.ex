@@ -1,13 +1,13 @@
-defmodule ExPingNext.CLI do
+defmodule NexPinger.CLI do
   @moduledoc """
   escript のエントリポイント。
-  使い方: exping_next [--log-file PATH] [--no-stdout] [--help] [設定ファイルパス...]
+  使い方: nexpinger [--log-file PATH] [--no-stdout] [--help] [設定ファイルパス...]
   """
 
-  alias ExPingNext.{Config, ConsoleSubscriber, Prober, Runner, TerminalInput}
+  alias NexPinger.{Config, ConsoleSubscriber, Prober, Runner, TerminalInput}
 
   @usage """
-  Usage: exping_next [options] <config file>...
+  Usage: nexpinger [options] <config file>...
 
     --log-file PATH     write monitoring results to a log file
     --no-stdout         disable console output
@@ -83,7 +83,7 @@ defmodule ExPingNext.CLI do
         ConsoleSubscriber.configure(hosts, stats_window, stats_width, stats_height)
 
         IO.puts(
-          "ExPing Next (Elixir CUI) 起動 — #{length(hosts)} 台 / #{item_count} 項目を監視します (#{Enum.join(paths, ", ")})"
+          "NexPinger (Elixir CUI) 起動 — #{length(hosts)} 台 / #{item_count} 項目を監視します (#{Enum.join(paths, ", ")})"
         )
 
         if log_file do
@@ -103,13 +103,13 @@ defmodule ExPingNext.CLI do
         end
 
         if stdout_enabled do
-          ExPingNext.Broadcaster.subscribe(ExPingNext.ConsoleSubscriber)
+          NexPinger.Broadcaster.subscribe(NexPinger.ConsoleSubscriber)
         end
 
         Enum.each(hosts, fn host ->
           Enum.each(host.items, fn item ->
             case DynamicSupervisor.start_child(
-                   ExPingNext.MonitorSupervisor,
+                   NexPinger.MonitorSupervisor,
                    {Runner, {host, item}}
                  ) do
               {:ok, _pid} -> :ok
@@ -173,8 +173,8 @@ defmodule ExPingNext.CLI do
   defp start_log_file_subscriber(log_file) do
     case Process.whereis(:log_file_subscriber) do
       nil ->
-        ExPingNext.FileSubscriber.start_link(log_file, :log_file_subscriber)
-        ExPingNext.Broadcaster.subscribe(:log_file_subscriber)
+        NexPinger.FileSubscriber.start_link(log_file, :log_file_subscriber)
+        NexPinger.Broadcaster.subscribe(:log_file_subscriber)
 
       _pid ->
         :ok

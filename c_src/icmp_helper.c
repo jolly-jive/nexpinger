@@ -1,5 +1,5 @@
 /*
- * icmp_helper.exe - ExPing Next 用の Windows ICMP 補助プログラム
+ * icmp_helper.exe - NexPinger 用の Windows ICMP 補助プログラム
  *
  * IcmpSendEcho2 / Icmp6SendEcho2 で ICMP Echo を送る（管理者権限不要）。
  * ping.exe と違い、結果は表示言語に依存しない。

@@ -1,7 +1,7 @@
-defmodule ExPingNext.RunnerTest do
+defmodule NexPinger.RunnerTest do
   use ExUnit.Case, async: false
 
-  alias ExPingNext.{Broadcaster, Host, Item, Runner}
+  alias NexPinger.{Broadcaster, Host, Item, Runner}
 
   defmodule NamedSubscriber do
     use GenServer
@@ -22,7 +22,7 @@ defmodule ExPingNext.RunnerTest do
     {:ok, supervisor} =
       DynamicSupervisor.start_link(
         strategy: :one_for_one,
-        name: ExPingNext.TestSupervisor
+        name: NexPinger.TestSupervisor
       )
 
     host = %Host{
@@ -97,10 +97,10 @@ defmodule ExPingNext.RunnerTest do
 
     item = %Item{name: "icmp", type: :icmp, interval: 10, timeout: 100}
 
-    path = "/tmp/ex_ping_next_dual_output.log"
+    path = "/tmp/nexpinger_dual_output.log"
     File.rm(path)
 
-    {:ok, _pid} = ExPingNext.FileSubscriber.start_link(path, :test_file_subscriber, self())
+    {:ok, _pid} = NexPinger.FileSubscriber.start_link(path, :test_file_subscriber, self())
     assert :ok = Broadcaster.subscribe(self())
     assert :ok = Broadcaster.subscribe(:test_file_subscriber)
     assert :ok = Broadcaster.publish(host, item, {:ok, 99.99})
@@ -122,13 +122,13 @@ defmodule ExPingNext.RunnerTest do
     item = %Item{name: "icmp", type: :icmp}
 
     without_mac = %{with_mac | name: "without-mac", mac_address: nil}
-    mac_path = "/tmp/ex_ping_next_with_mac.log"
-    no_mac_path = "/tmp/ex_ping_next_without_mac.log"
+    mac_path = "/tmp/nexpinger_with_mac.log"
+    no_mac_path = "/tmp/nexpinger_without_mac.log"
     File.rm(mac_path)
     File.rm(no_mac_path)
 
-    {:ok, mac_pid} = ExPingNext.FileSubscriber.start_link(mac_path, nil, self())
-    {:ok, no_mac_pid} = ExPingNext.FileSubscriber.start_link(no_mac_path, nil, self())
+    {:ok, mac_pid} = NexPinger.FileSubscriber.start_link(mac_path, nil, self())
+    {:ok, no_mac_pid} = NexPinger.FileSubscriber.start_link(no_mac_path, nil, self())
     send(mac_pid, {:item_result, with_mac, item, {:ok, 1.23}})
     send(no_mac_pid, {:item_result, without_mac, item, {:ok, 1.23}})
 

@@ -1,9 +1,9 @@
-defmodule ExPingNext.StatisticsView do
+defmodule NexPinger.StatisticsView do
   @moduledoc """
   統計画面の固定幅テキストを生成する。
   """
 
-  alias ExPingNext.Statistics
+  alias NexPinger.Statistics
 
   @layouts %{
     80 => [16, 6, 5, 6, 8, 6, 6, 6],
@@ -20,7 +20,7 @@ defmodule ExPingNext.StatisticsView do
 
     lines = [
       fit(
-        "ExPing Next - Ping Statistics | RTT: ms | Window: #{statistics.window} attempts",
+        "NexPinger - Ping Statistics | RTT: ms | Window: #{statistics.window} attempts",
         width
       ),
       format_row(

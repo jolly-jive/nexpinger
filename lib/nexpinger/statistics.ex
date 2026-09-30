@@ -1,9 +1,9 @@
-defmodule ExPingNext.Statistics do
+defmodule NexPinger.Statistics do
   @moduledoc """
   Item ごとの累計カウンターと直近試行の RTT 統計。
   """
 
-  alias ExPingNext.{Host, Item}
+  alias NexPinger.{Host, Item}
 
   @type result :: {:ok, float()} | {:error, term()}
 
