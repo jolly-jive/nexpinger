@@ -35,6 +35,11 @@ defmodule ExPingNext.CLITest do
              ])
   end
 
+  test "parses the ping-command flag" do
+    assert {[ping_command: true], ["config/hosts.yml"], []} =
+             ExPingNext.CLI.parse_options(["--ping-command", "config/hosts.yml"])
+  end
+
   test "returns invalid options" do
     assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
              ExPingNext.CLI.parse_options(["--unknown", "config/hosts.yml"])

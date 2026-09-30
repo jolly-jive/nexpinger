@@ -11,7 +11,8 @@ defmodule ExPingNext.Application do
        strategy: :one_for_one,
        name: ExPingNext.MonitorSupervisor},
       ExPingNext.Broadcaster,
-      ExPingNext.ConsoleSubscriber
+      ExPingNext.ConsoleSubscriber,
+      ExPingNext.IcmpHelper
     ]
 
     {:ok, supervisor} =

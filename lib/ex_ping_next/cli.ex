@@ -13,6 +13,7 @@ defmodule ExPingNext.CLI do
     --no-stdout         disable console output
     --stats-window N    use the last N attempts for RTT statistics (default: 1000)
     --stats-width N     use an 80- or 120-column statistics layout
+    --ping-command      always use the OS ping command for ICMP
     --help              show this help message
 
   """
@@ -25,6 +26,7 @@ defmodule ExPingNext.CLI do
         no_stdout: :boolean,
         stats_window: :integer,
         stats_width: :integer,
+        ping_command: :boolean,
         help: :boolean
       ]
     )
@@ -51,6 +53,10 @@ defmodule ExPingNext.CLI do
     stdout_enabled = not Keyword.get(opts, :no_stdout, false)
     stats_window = Keyword.get(opts, :stats_window, 1000)
     requested_stats_width = Keyword.get(opts, :stats_width)
+
+    if Keyword.get(opts, :ping_command, false) do
+      Prober.force_ping_command()
+    end
 
     case args do
       [] ->

@@ -9,7 +9,9 @@ ExPing 後継プロジェクトの Elixir 実装。TTY では「Ping結果」と
 - ICMP Ping（特権不要）
   - Linux: ICMP datagram ソケットで直接送信。`net.ipv4.ping_group_range` に実行ユーザーのグループが含まれていない場合は `LC_ALL=C` を付けた `ping` コマンドにフォールバック
     （有効にする例: `sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`）
+  - Windows: `IcmpSendEcho2` / `Icmp6SendEcho2` を呼ぶ補助プログラム（`priv/bin/icmp_helper.exe`）で送信。補助プログラムが無い・実行できない場合は `ping.exe` にフォールバック（表示言語に依存しない方法で結果を読み取る）
   - その他の OS: OS の `ping` コマンドを実行
+  - 起動時に使用する方法（とフォールバックの理由）を `ICMP: ...` として表示
 - TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測）
 - 1行1項目のストリーム出力（成功=緑 OK / 失敗=赤 NG）
 - TTY で `Tab` を押すと Ping結果の追記表示と Ping統計を切り替え
@@ -60,6 +62,10 @@ mix escript.build
 Burrito は Windows 上でのビルドに対応していないため、WSL でビルドする。
 WSL では Zig のキャッシュを Linux 側に置かないとビルドに失敗する。
 
+Windows 用の補助プログラム `priv/bin/icmp_helper.exe`（ソースは `c_src/icmp_helper.c`）は、
+`mix compile` の際に `zig cc` でクロスコンパイルされ、リリースに同梱される。
+`zig` が無い環境ではビルドを省略する（その場合 Windows では `ping.exe` を使う）。
+
 ```bash
 ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-exping-next MIX_ENV=prod BURRITO_TARGET=windows mix release
 ```
@@ -75,6 +81,7 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-exping-next MIX_ENV=prod BURRITO_TARGET=windo
 - `--no-stdout`: コンソールへの出力を抑止
 - `--stats-window N`: 平均・P95・P99 を計算する直近試行数（既定値1000、1以上）
 - `--stats-width N`: 統計画面の幅（80または120桁、省略時は端末幅から選択）
+- `--ping-command`: ICMP ソケット（Linux）や `icmp_helper.exe`（Windows）を使わず、常に OS の `ping` コマンドで ICMP 監視を行う
 - `--help`: ヘルプを表示
 - `config file`: 監視設定ファイルのパス（1つ以上必須。複数指定時はすべて読み込み）
 

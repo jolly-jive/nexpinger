@@ -1,5 +1,7 @@
 /exping_next
 /burrito_out/
+/priv/bin/icmp_helper.exe
+/priv/bin/*.pdb
 
 # --- Elixir (GitHub official) ---
 /_build/ 

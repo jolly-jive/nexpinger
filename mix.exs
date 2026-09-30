@@ -1,3 +1,57 @@
+defmodule Mix.Tasks.Compile.IcmpHelper do
+  @moduledoc """
+  Windows 用の ICMP 補助プログラム（priv/bin/icmp_helper.exe）を `zig cc` でクロスコンパイルする。
+  zig が無い環境ではビルドを省略する（Windows では ping.exe にフォールバックする）。
+  """
+
+  use Mix.Task.Compiler
+
+  @source "c_src/icmp_helper.c"
+  @target "priv/bin/icmp_helper.exe"
+
+  @impl true
+  def run(_args) do
+    zig = System.find_executable("zig")
+
+    cond do
+      File.exists?(@target) and not Mix.Utils.stale?([@source], [@target]) ->
+        {:noop, []}
+
+      zig == nil ->
+        Mix.shell().info("zig not found; skipping #{@target} (Windows falls back to ping.exe)")
+        {:noop, []}
+
+      true ->
+        build(zig)
+    end
+  end
+
+  defp build(zig) do
+    File.mkdir_p!(Path.dirname(@target))
+
+    args =
+      ~w(cc -target x86_64-windows-gnu -O2 -s -o #{@target} #{@source} -liphlpapi -lws2_32)
+
+    # WSL で /mnt/c 配下に Zig のキャッシュを置くと失敗するため、既定では一時ディレクトリを使う
+    env =
+      for {name, dir} <- [
+            {"ZIG_LOCAL_CACHE_DIR", "zig-cache-exping-next"},
+            {"ZIG_GLOBAL_CACHE_DIR", "zig-global-cache-exping-next"}
+          ],
+          System.get_env(name) == nil,
+          do: {name, Path.join(System.tmp_dir!(), dir)}
+
+    case System.cmd(zig, args, stderr_to_stdout: true, env: env) do
+      {_output, 0} ->
+        Mix.shell().info("Compiled #{@target}")
+        {:ok, []}
+
+      {output, status} ->
+        Mix.raise("zig cc failed with status #{status}:\n#{output}")
+    end
+  end
+end
+
 defmodule ExPingNext.MixProject do
   use Mix.Project
 
@@ -7,6 +61,7 @@ defmodule ExPingNext.MixProject do
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
+      compilers: Mix.compilers() ++ [:icmp_helper],
       deps: deps(),
       escript: escript(),
       releases: releases()

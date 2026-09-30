@@ -3,11 +3,12 @@ defmodule ExPingNext.Prober do
   1回分の疎通確認を実行する。
   ICMP は特権不要の方式で送る。
     * Linux: ICMP datagram ソケット（`ExPingNext.IcmpSocket`）。使えなければ ping コマンド
+    * Windows: IcmpSendEcho2 を呼ぶ補助プログラム（`ExPingNext.IcmpHelper`）。使えなければ ping コマンド
     * その他: OS の ping コマンド
   TCP は :gen_tcp.connect の成否とRTTを計測する。
   """
 
-  alias ExPingNext.{Host, IcmpSocket, Item}
+  alias ExPingNext.{Host, IcmpHelper, IcmpSocket, Item}
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, reason :: String.t()}
 
@@ -20,10 +21,19 @@ defmodule ExPingNext.Prober do
   """
   @spec icmp_method() :: String.t()
   def icmp_method do
-    case :os.type() do
-      {:unix, :linux} ->
+    case {ping_command_forced?(), :os.type()} do
+      {true, _os} ->
+        "ping command (forced by --ping-command)"
+
+      {_, {:unix, :linux}} ->
         case IcmpSocket.availability() do
           :ok -> "ICMP socket"
+          {:error, reason} -> "ping command (fallback: #{reason})"
+        end
+
+      {_, {:win32, _}} ->
+        case IcmpHelper.availability() do
+          :ok -> "IcmpSendEcho2 (icmp_helper.exe)"
           {:error, reason} -> "ping command (fallback: #{reason})"
         end
 
@@ -32,18 +42,28 @@ defmodule ExPingNext.Prober do
     end
   end
 
+  @doc """
+  ICMP ソケットや補助プログラムを使わず、常に OS の ping コマンドを使うようにする（`--ping-command`）。
+  """
+  @spec force_ping_command() :: :ok
+  def force_ping_command, do: Application.put_env(:ex_ping_next, :force_ping_command, true)
+
+  defp ping_command_forced?, do: Application.get_env(:ex_ping_next, :force_ping_command, false)
+
   # ---- ICMP ----------------------------------------------------------
 
   defp icmp_probe(%Host{address: address}, %Item{timeout: timeout}) do
-    case :os.type() do
-      {:unix, :linux} ->
-        case IcmpSocket.ping(address, timeout) do
-          {:error, :unavailable} -> ping_command_probe(address, timeout)
-          result -> result
-        end
+    result =
+      case {ping_command_forced?(), :os.type()} do
+        {true, _os} -> {:error, :unavailable}
+        {_, {:unix, :linux}} -> IcmpSocket.ping(address, timeout)
+        {_, {:win32, _}} -> IcmpHelper.ping(address, timeout)
+        _ -> {:error, :unavailable}
+      end
 
-      _ ->
-        ping_command_probe(address, timeout)
+    case result do
+      {:error, :unavailable} -> ping_command_probe(address, timeout)
+      result -> result
     end
   rescue
     e -> {:error, Exception.message(e)}
@@ -56,7 +76,7 @@ defmodule ExPingNext.Prober do
 
     case Task.yield(task, timeout + 500) || Task.shutdown(task, :brutal_kill) do
       {:ok, {output, 0}} ->
-        parse_ping_time(output)
+        parse_ping_time(output, :os.type())
 
       {:ok, {_output, _exit_code}} ->
         {:error, "unreachable"}
@@ -90,7 +110,20 @@ defmodule ExPingNext.Prober do
     end
   end
 
-  defp parse_ping_time(output) do
+  # Windows の ping.exe は表示言語で "time"/"ms" が翻訳され、環境変数で英語に固定できない。
+  # 言語に依存しない "TTL=" を手がかりに、その直前の "=<数値>" / "<<数値>" を RTT とする。
+  # 例: "時間 =10ms TTL=117", "Zeit<1ms TTL=128", "temps=10 ms TTL=117", "время=10мс TTL=117"
+  # "宛先ホストに到達できません" の応答行には TTL= が無いので、失敗として扱われる。
+  @doc false
+  @spec parse_ping_time(binary(), {atom(), atom()}) :: result()
+  def parse_ping_time(output, {:win32, _}) do
+    case Regex.run(~r/[=<]\s*(\d+)[^=<\r\n]*?TTL=/, output) do
+      [_, ms] -> {:ok, String.to_integer(ms) * 1.0}
+      nil -> {:error, "no reply"}
+    end
+  end
+
+  def parse_ping_time(output, _os_type) do
     case Regex.run(~r/time[=<]([\d.]+)\s*ms/i, output) do
       [_, ms] -> {:ok, String.to_float(normalize_float(ms))}
       nil -> {:error, "no reply"}
