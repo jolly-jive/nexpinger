@@ -1,6 +1,6 @@
 defmodule NexPinger.Statistics do
   @moduledoc """
-  Item ごとの累計カウンターと直近試行の RTT 統計。
+  Per-Item totals and RTT stats over recent attempts.
   """
 
   alias NexPinger.{Host, Item}

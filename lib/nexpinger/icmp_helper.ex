@@ -1,20 +1,20 @@
 defmodule NexPinger.IcmpHelper do
   @moduledoc """
-  Windows 用。IcmpSendEcho2 / Icmp6SendEcho2 を呼ぶ補助プログラム
-  （`priv/bin/icmp_helper.exe`、ソースは `c_src/icmp_helper.c`）をポートとして常駐させ、
-  ICMP Echo を送る。ping.exe と違い、結果が表示言語に依存しない。
+  Windows only. Sends ICMP Echo via a helper that calls IcmpSendEcho2 / Icmp6SendEcho2
+  (`priv/bin/icmp_helper.exe`, source `c_src/icmp_helper.c`), kept running as a port.
+  Unlike ping.exe, results do not depend on the display language.
 
-  補助プログラムは最初の要求のときに起動し、応答を返した後に終了した場合は次の要求で
-  起動し直す。補助プログラムが無い、起動できない、一度も応答せずに終了した場合は
-  `{:error, :unavailable}` を返す。呼び出し側はこのとき ping コマンドにフォールバックする。
+  The helper starts on the first request. If it exits after replying, it restarts on the
+  next request. If it is missing, fails to start, or exits without ever replying, returns
+  `{:error, :unavailable}`; the caller then falls back to the ping command.
 
-  補助プログラムのパスは `config :nexpinger, :icmp_helper_path` で差し替えられる（テスト用）。
+  Override the helper path with `config :nexpinger, :icmp_helper_path` (for tests).
 
-  プロトコル（1 行 1 メッセージ、応答は完了順）:
+  Protocol (one message per line, replies in completion order):
 
-      要求: <id> <address> <timeout_ms>
-      応答: <id> ok <rtt_ms>
-            <id> error <reason>
+      Request: <id> <address> <timeout_ms>
+      Reply:   <id> ok <rtt_ms>
+               <id> error <reason>
   """
 
   use GenServer
@@ -28,12 +28,12 @@ defmodule NexPinger.IcmpHelper do
   end
 
   @doc """
-  補助プログラムが使えるかを調べる。使えない場合は英語の理由を返す。
+  Checks whether the helper works. Returns the reason if not.
   """
   @spec availability() :: :ok | {:error, String.t()}
   def availability do
     with {:ok, _path} <- executable() do
-      # 実際に起動できるかは動かしてみないと分からないため、ループバックに 1 回送る
+      # Only way to know it runs is to try: ping loopback once
       case ping("127.0.0.1", 1_000) do
         {:error, :unavailable} -> GenServer.call(__MODULE__, :broken_reason)
         _result -> :ok
@@ -113,8 +113,8 @@ defmodule NexPinger.IcmpHelper do
     end
   end
 
-  # 一度も応答せずに終了した場合は、実行できない（形式違い・セキュリティ製品による遮断等）
-  # とみなし、以後は ping コマンドにフォールバックさせる。
+  # Exited without replying: can't run here (wrong format, blocked by security software, etc.).
+  # Fall back to the ping command from now on.
   def handle_info({port, {:exit_status, status}}, %{port: port, responded?: false} = state) do
     Enum.each(state.pending, fn {_id, from} -> GenServer.reply(from, {:error, :unavailable}) end)
 

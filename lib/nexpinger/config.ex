@@ -1,6 +1,6 @@
 defmodule NexPinger.Config do
   @moduledoc """
-  YAML または hosts 形式の設定ファイルを読み込み、NexPinger.Host のリストに変換する。
+  Loads a YAML or hosts-format config file into a list of NexPinger.Host.
   """
 
   alias NexPinger.{Host, Item}
@@ -105,11 +105,11 @@ defmodule NexPinger.Config do
       case Map.get(map, "type", "icmp") do
         "icmp" -> :icmp
         "tcp" -> :tcp
-        other -> raise "不明な type です: #{inspect(other)} (item: #{inspect(map["name"])})"
+        other -> raise "Unknown type: #{inspect(other)} (item: #{inspect(map["name"])})"
       end
 
     if type == :tcp and is_nil(map["port"]) do
-      raise "type: tcp のアイテム #{inspect(map["name"])} には port の指定が必要です"
+      raise "Item #{inspect(map["name"])} (type: tcp) needs a port"
     end
 
     %Item{

@@ -1,7 +1,7 @@
 defmodule NexPinger.CLI do
   @moduledoc """
-  escript のエントリポイント。
-  使い方: nexpinger [--log-file PATH [--log-format FORMAT]] [--no-stdout] [--help] [設定ファイルパス...]
+  escript entry point.
+  Usage: nexpinger [--log-file PATH [--log-format FORMAT]] [--no-stdout] [--help] [config file...]
   """
 
   alias NexPinger.{Config, ConsoleSubscriber, FileSubscriber, Prober, Runner, TerminalInput}
@@ -39,7 +39,7 @@ defmodule NexPinger.CLI do
 
     if invalid != [] do
       invalid_options = Enum.map_join(invalid, ", ", fn {option, _value} -> option end)
-      IO.puts(:stderr, "不正なオプションです: #{invalid_options}")
+      IO.puts(:stderr, "Invalid option: #{invalid_options}")
       IO.puts(:stderr, @usage)
       System.halt(1)
     end
@@ -72,7 +72,7 @@ defmodule NexPinger.CLI do
 
     case args do
       [] ->
-        IO.puts(:stderr, "設定ファイルのパスを指定してください")
+        IO.puts(:stderr, "No config file given")
         System.halt(1)
 
       paths ->
@@ -81,7 +81,7 @@ defmodule NexPinger.CLI do
   end
 
   @doc """
-  `--log-format` を検証し、ファイル出力形式を返す。`--log-file` 無しでの指定はエラーとする。
+  Validates `--log-format` and returns the log file format. Error if given without `--log-file`.
   """
   @spec log_format(keyword()) :: {:ok, FileSubscriber.format()} | {:error, String.t()}
   def log_format(opts) do
@@ -92,19 +92,19 @@ defmodule NexPinger.CLI do
         {:ok, :text}
 
       {_format, nil} ->
-        {:error, "--log-format は --log-file と併せて指定してください"}
+        {:error, "--log-format requires --log-file"}
 
       {format, _log_file} ->
         if format in names,
           do: {:ok, String.to_existing_atom(format)},
-          else: {:error, "--log-format は #{Enum.join(names, ", ")} のいずれかを指定してください"}
+          else: {:error, "--log-format must be one of: #{Enum.join(names, ", ")}"}
     end
   end
 
   defp run(paths, log_file, log_format, stdout_enabled, stats_window, requested_stats_width) do
     case load_hosts(paths) do
       {:ok, []} ->
-        IO.puts(:stderr, "設定ファイルに監視対象ホストが1件もありません: #{Enum.join(paths, ", ")}")
+        IO.puts(:stderr, "No hosts in config: #{Enum.join(paths, ", ")}")
         System.halt(1)
 
       {:ok, hosts} ->
@@ -116,11 +116,11 @@ defmodule NexPinger.CLI do
         ConsoleSubscriber.configure(hosts, stats_window, stats_width, stats_height)
 
         IO.puts(
-          "NexPinger (Elixir CUI) 起動 — #{length(hosts)} 台 / #{item_count} 項目を監視します (#{Enum.join(paths, ", ")})"
+          "NexPinger (Elixir CUI) started: #{length(hosts)} hosts, #{item_count} items (#{Enum.join(paths, ", ")})"
         )
 
         if log_file do
-          IO.puts("ログ出力: #{log_file} (#{log_format})")
+          IO.puts("Log file: #{log_file} (#{log_format})")
         end
 
         IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
@@ -146,7 +146,7 @@ defmodule NexPinger.CLI do
                    {Runner, {host, item}}
                  ) do
               {:ok, _pid} -> :ok
-              {:error, reason} -> IO.puts(:stderr, "監視項目の起動に失敗しました: #{inspect(reason)}")
+              {:error, reason} -> IO.puts(:stderr, "Failed to start monitor: #{inspect(reason)}")
             end
           end)
         end)
@@ -157,12 +157,12 @@ defmodule NexPinger.CLI do
             :unavailable -> Process.sleep(:infinity)
           end
         else
-          # キー入力が使えないため、メインプロセスは常駐させる（Ctrl+C で終了）
+          # No key input: keep the main process alive (Ctrl+C to quit)
           Process.sleep(:infinity)
         end
 
       {:error, reason} ->
-        IO.puts(:stderr, "設定ファイルの読み込みに失敗しました: #{inspect(reason)}")
+        IO.puts(:stderr, "Failed to load config: #{inspect(reason)}")
         System.halt(1)
     end
   end
@@ -173,11 +173,11 @@ defmodule NexPinger.CLI do
 
     cond do
       stats_window <= 0 ->
-        IO.puts(:stderr, "--stats-window は1以上を指定してください")
+        IO.puts(:stderr, "--stats-window must be >= 1")
         System.halt(1)
 
       not is_nil(stats_width) and stats_width not in [80, 120] ->
-        IO.puts(:stderr, "--stats-width は80または120を指定してください")
+        IO.puts(:stderr, "--stats-width must be 80 or 120")
         System.halt(1)
 
       true ->

@@ -1,7 +1,7 @@
 defmodule Mix.Tasks.Compile.IcmpHelper do
   @moduledoc """
-  Windows 用の ICMP 補助プログラム（priv/bin/icmp_helper.exe）を `zig cc` でクロスコンパイルする。
-  zig が無い環境ではビルドを省略する（Windows では ping.exe にフォールバックする）。
+  Cross-compiles the Windows ICMP helper (priv/bin/icmp_helper.exe) with `zig cc`.
+  Skipped if zig is missing (Windows then falls back to ping.exe).
   """
 
   use Mix.Task.Compiler
@@ -32,7 +32,7 @@ defmodule Mix.Tasks.Compile.IcmpHelper do
     args =
       ~w(cc -target x86_64-windows-gnu -O2 -s -o #{@target} #{@source} -liphlpapi -lws2_32)
 
-    # WSL で /mnt/c 配下に Zig のキャッシュを置くと失敗するため、既定では一時ディレクトリを使う
+    # Zig cache fails under /mnt/c on WSL, so default to the temp dir
     env =
       for {name, dir} <- [
             {"ZIG_LOCAL_CACHE_DIR", "zig-cache-nexpinger"},

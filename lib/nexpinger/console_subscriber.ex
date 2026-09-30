@@ -1,6 +1,6 @@
 defmodule NexPinger.ConsoleSubscriber do
   @moduledoc """
-  Broadcaster 経由で届いた監視結果をコンソールに出力する subscriber.
+  Subscriber that prints results from the Broadcaster to the console.
   """
 
   use GenServer
@@ -10,10 +10,10 @@ defmodule NexPinger.ConsoleSubscriber do
   @default_stats_window 1000
   @default_stats_width 80
   @default_stats_height 24
-  # 統計画面の再描画間隔（ミリ秒）。監視結果ごとには描画せず、この間隔でまとめて描画する。
+  # Stats redraw interval (ms). Redraw on this timer, not per result.
   @stats_render_interval 100
 
-  # 統計画面は代替スクリーンバッファに表示し、表示中はカーソルを隠す
+  # Stats screen uses the alternate screen buffer and hides the cursor
   @enter_stats_screen "\e[?1049h\e[?25l\e[2J\e[H"
   @leave_stats_screen "\e[?25h\e[?1049l"
 
@@ -137,7 +137,7 @@ defmodule NexPinger.ConsoleSubscriber do
     %{state | stats_dirty: true, render_scheduled: true}
   end
 
-  # raw mode では "\n" が "\r\n" に変換されない端末（Windows）があるため、"\r\n" を明示する。
+  # Some terminals (Windows) don't map "\n" to "\r\n" in raw mode, so write "\r\n".
   defp print_result(host, item, {:ok, rtt_ms}) do
     IO.write([
       timestamp(),
@@ -162,8 +162,8 @@ defmodule NexPinger.ConsoleSubscriber do
     ])
   end
 
-  # 画面を消去してから描くと空白の瞬間が見えてちらつくため、
-  # カーソルを左上に戻して上書きし、行末と画面の残りだけを消す。1回の書き込みで出力する。
+  # Clearing first causes flicker. Instead: cursor to top-left, overwrite,
+  # clear line ends and the rest of the screen. One write.
   defp render_stats(state) do
     frame =
       state.statistics

@@ -1,6 +1,6 @@
 defmodule NexPinger.Host do
   @moduledoc """
-  監視対象ホストと、そのホスト上の監視項目を保持する構造体。
+  A monitored host and its items.
   """
 
   alias NexPinger.Item

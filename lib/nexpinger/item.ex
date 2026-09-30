@@ -1,6 +1,6 @@
 defmodule NexPinger.Item do
   @moduledoc """
-  ホスト上で実行する1つの監視項目。
+  One check on a host.
   """
 
   @enforce_keys [:name, :type]

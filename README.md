@@ -1,44 +1,46 @@
-# NexPinger (Elixir CUI版)
+# NexPinger (Elixir CUI)
 
-複数のホストを ICMP / TCP で継続監視する、Elixir 製の CUI ツール。TTY では「Ping結果」と「Ping統計」を切り替えて表示できます。
+English | [日本語](README.ja.md)
 
-## 機能（現時点）
+A CUI tool in Elixir that keeps monitoring many hosts over ICMP / TCP. On a TTY, you can switch between "Ping Results" and "Ping Statistics".
 
-- YAML設定ファイルからホストと監視項目（Item）を読み込み
-- Item ごとに独立した間隔（interval）でループ監視
-- ICMP Ping（特権不要）
-  - Linux: ICMP datagram ソケットで直接送信。`net.ipv4.ping_group_range` に実行ユーザーのグループが含まれていない場合は `LC_ALL=C` を付けた `ping` コマンドにフォールバック
-    （有効にする例: `sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`）
-  - Windows: `IcmpSendEcho2` / `Icmp6SendEcho2` を呼ぶ補助プログラム（`priv/bin/icmp_helper.exe`）で送信。補助プログラムが無い・実行できない場合は `ping.exe` にフォールバック（表示言語に依存しない方法で結果を読み取る）
-  - その他の OS: OS の `ping` コマンドを実行
-  - 起動時に使用する方法（とフォールバックの理由）を `ICMP: ...` として表示
-- TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測）
-- 1行1項目のストリーム出力（成功=緑 OK / 失敗=赤 NG）
-- TTY で `Tab` を押すと Ping結果の追記表示と Ping統計を切り替え
-- TTY で `Q` を押すと終了（`Ctrl+C` でも終了可能）
-- Ping統計で Item ごとの実施回数、失敗回数、失敗率、最新 RTT、平均、P95、P99を表示
-- RTT の集計窓は `--stats-window` で指定（既定値1000試行）
-- 監視結果を stdout とログファイルの両方へ出力可能
-- ログファイルの形式を text / TSV / JSON Lines から選択可能（`--log-format`）
-- `--no-stdout` でコンソール表示を無効化可能
-- `--help` でヘルプを表示可能
-- 同一 IP サブネット上の監視対象では、近隣テーブルから MAC アドレスを表示
+## Features (so far)
 
-## セットアップ
+- Loads hosts and checks (Items) from a YAML config file
+- Each Item runs on its own interval
+- ICMP ping (no privileges needed)
+  - Linux: sends directly over an ICMP datagram socket. If the user's group is not in `net.ipv4.ping_group_range`, falls back to the `ping` command with `LC_ALL=C`
+    (to enable: `sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`)
+  - Windows: sends via a helper (`priv/bin/icmp_helper.exe`) that calls `IcmpSendEcho2` / `Icmp6SendEcho2`. If the helper is missing or can't run, falls back to `ping.exe` (parsed independently of the display language)
+  - Other OSes: runs the OS `ping` command
+  - Shows the method in use (and any fallback reason) at startup as `ICMP: ...`
+- TCP ping (checks `:gen_tcp.connect` and measures the RTT)
+- Streams one line per result (OK in green / NG in red)
+- On a TTY, `Tab` switches between the result stream and Ping Statistics
+- On a TTY, `Q` quits (`Ctrl+C` also works)
+- Ping Statistics shows, per Item: runs, failures, loss rate, latest RTT, average, P95, P99
+- RTT window set by `--stats-window` (default: 1000 attempts)
+- Results can go to stdout and a log file at the same time
+- Log file format: text / TSV / JSON Lines (`--log-format`)
+- `--no-stdout` turns off console output
+- `--help` shows help
+- For targets on the same IP subnet, shows the MAC address from the neighbor table
+
+## Setup
 
 ```bash
 mix deps.get
 ```
 
-## 実行方法
+## Running
 
-### 1. mix経由で直接実行
+### 1. Run directly with mix
 
 ```bash
 mix run --no-halt -e 'NexPinger.CLI.main(["config/hosts.yml"])'
 ```
 
-### 1a. オプション付きで実行
+### 1a. With options
 
 ```bash
 mix run --no-halt -e 'NexPinger.CLI.main(["--log-file", "/tmp/nexpinger.log", "config/hosts.yml"])'
@@ -48,7 +50,7 @@ mix run --no-halt -e 'NexPinger.CLI.main(["--stats-window", "500", "--stats-widt
 mix run --no-halt -e 'NexPinger.CLI.main(["--help"])'
 ```
 
-### 2. escriptとしてビルドして実行
+### 2. Build and run as an escript
 
 ```bash
 mix escript.build
@@ -60,14 +62,14 @@ mix escript.build
 ./nexpinger --help
 ```
 
-### 3. Burrito で単体実行ファイルとしてビルドして実行
+### 3. Build and run as a single executable with Burrito
 
-Burrito は Windows 上でのビルドに対応していないため、WSL でビルドする。
-WSL では Zig のキャッシュを Linux 側に置かないとビルドに失敗する。
+Burrito can't build on Windows, so build in WSL.
+In WSL, the Zig cache must be on the Linux side or the build fails.
 
-Windows 用の補助プログラム `priv/bin/icmp_helper.exe`（ソースは `c_src/icmp_helper.c`）は、
-`mix compile` の際に `zig cc` でクロスコンパイルされ、リリースに同梱される。
-`zig` が無い環境ではビルドを省略する（その場合 Windows では `ping.exe` を使う）。
+The Windows helper `priv/bin/icmp_helper.exe` (source: `c_src/icmp_helper.c`)
+is cross-compiled with `zig cc` during `mix compile` and bundled in the release.
+Without `zig`, this step is skipped (Windows then uses `ping.exe`).
 
 ```bash
 ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=windows mix release
@@ -78,34 +80,34 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=windows
 .\burrito_out\nexpinger_windows.exe config\hosts.yml
 ```
 
-## CLI オプション
+## CLI options
 
-- `--log-file PATH`: 監視結果を指定したファイルへ追記
-- `--log-format FORMAT`: ログファイルの形式（`text`（既定）/ `tsv` / `jsonl`）。`--log-file` と併せて指定する（単独指定はエラー）
-- `--no-stdout`: コンソールへの出力を抑止
-- `--stats-window N`: 平均・P95・P99 を計算する直近試行数（既定値1000、1以上）
-- `--stats-width N`: 統計画面の幅（80または120桁、省略時は端末幅から選択）
-- `--ping-command`: ICMP ソケット（Linux）や `icmp_helper.exe`（Windows）を使わず、常に OS の `ping` コマンドで ICMP 監視を行う
-- `--help`: ヘルプを表示
-- `config file`: 監視設定ファイルのパス（1つ以上必須。複数指定時はすべて読み込み）
+- `--log-file PATH`: append results to this file
+- `--log-format FORMAT`: log file format (`text` (default) / `tsv` / `jsonl`). Requires `--log-file`
+- `--no-stdout`: no console output
+- `--stats-window N`: number of recent attempts for average / P95 / P99 (default 1000, min 1)
+- `--stats-width N`: stats screen width (80 or 120 columns; picked from the terminal width if omitted)
+- `--ping-command`: always use the OS `ping` command for ICMP, not the ICMP socket (Linux) or `icmp_helper.exe` (Windows)
+- `--help`: show help
+- `config file`: path to a config file (at least one; all are loaded if several)
 
-`--log-file` を指定しない場合、ファイル出力は行いません。
+Without `--log-file`, nothing is written to a file.
 
-TTY では `Tab` で Ping結果と Ping統計を切り替え、統計画面では上下キーまたは `j`/`k` で一覧をスクロールし、`Q` で終了します。統計は Host/Item ごとに表示し、実施回数・失敗回数・失敗率は起動中の累計です。平均・P95・P99 は直近 `N` 回の試行に含まれる成功 RTT のみで計算し、失敗試行は RTT 統計から除外します。最新欄は成功時に `OK <RTT>`、失敗時に `NG` と表示します。単位は画面上部に `RTT: ms` と表示します。失敗時のベル通知はどちらの画面でも行われます。TTY が使えない場合は従来の追記出力になります。
+On a TTY, `Tab` switches between Ping Results and Ping Statistics. On the stats screen, scroll with the Up/Down keys or `j`/`k`, and quit with `Q`. Stats are shown per Host/Item. Runs, failures, and loss rate are totals since startup. Average, P95, and P99 use only successful RTTs in the last `N` attempts; failures are excluded. The Latest column shows `OK <RTT>` on success and `NG` on failure. The unit is shown at the top as `RTT: ms`. A bell rings on failure on both screens. Without a TTY, output is the plain result stream.
 
-統計のパーセンタイルは nearest-rank 方式で計算します。RTT サンプルがない場合は `-` を表示します。
+Percentiles use the nearest-rank method. With no RTT samples, `-` is shown.
 
-例:
+Example:
 
 ```bash
 ./nexpinger --log-file ./monitor.log --no-stdout config/hosts.yml
 ```
 
-この場合、ファイルへ記録される一方で標準出力には結果が表示されません。
+This writes results to the file and prints nothing to stdout.
 
-## 設定ファイル
+## Config file
 
-YAML 形式と `/etc/hosts` 形式を内容から自動判定します。hosts 形式では各有効行の IP アドレスと最初のホスト名を使って ICMP 監視を行います。追加の別名は同じホストを指すため個別の監視項目にはなりません。監視間隔とタイムアウトは Item の既定値（各1000ミリ秒）です。TCP 監視など詳細な設定には YAML 形式を使ってください。
+YAML and `/etc/hosts` formats are detected from the content. In hosts format, each valid line's IP address and first host name become an ICMP check. Extra aliases point to the same host, so they are not separate checks. Interval and timeout use the Item defaults (1000 ms each). Use YAML for TCP checks and other settings.
 
 ### YAML (`config/hosts.yml`)
 
@@ -132,11 +134,11 @@ hosts:
         interval: 5000
 ```
 
-- ホストは `name` と `address` を持ち、`items` に1つ以上の監視項目を定義します
-- Item は `name`、`type`（`icmp` または `tcp`）、`interval`（ミリ秒）、`timeout`（ミリ秒、省略時1000）を持ちます
-- `port` は `type: tcp` の場合に必須です
+- A host has `name` and `address`, and one or more checks in `items`
+- An Item has `name`, `type` (`icmp` or `tcp`), `interval` (ms), and `timeout` (ms, default 1000)
+- `port` is required for `type: tcp`
 
-### hosts 形式
+### hosts format
 
 ```text
 127.0.0.1 localhost localhost.localdomain
@@ -144,7 +146,7 @@ hosts:
 192.168.1.5 nas
 ```
 
-## 出力例
+## Sample output
 
 ```
 2026-09-16 12:00:00.123 | gateway/ping             (192.168.1.1    ) 08:33:ed:8f:c1:f2 ICMP OK    1.23 ms
@@ -152,29 +154,29 @@ hosts:
 2026-09-16 12:00:02.789 | dns-server/ping           (192.168.1.10   )                   ICMP NG    timeout
 ```
 
-時刻は画面・ファイルとも実行環境のローカル時刻です。同一 IP サブネット上で MAC アドレスを取得できた場合だけ表示し、取得できない場合も同じ幅の空白を確保します。`--log-format text`（既定）ではログファイルへも同じ形式で追記されます。`--no-stdout` を付けると、コンソール側には出力されず、ファイルのみに残ります。
+Times are local time, on screen and in files. The MAC address is shown only when found on the same IP subnet; otherwise the same width is left blank. With `--log-format text` (default), the log file gets the same format. With `--no-stdout`, nothing goes to the console; results go only to the file.
 
-### ログファイル形式
+### Log file formats
 
-`--log-format tsv` / `jsonl` では、Excel などで解析しやすいよう整形や単位を付けない生データを出力します。項目は次の順です。
+`--log-format tsv` / `jsonl` write raw data with no padding or units, for easy analysis in Excel and similar tools. Fields, in order:
 
-| 項目 | 内容 |
+| Field | Content |
 |---|---|
-| `timestamp` | 計測時刻（ローカル時刻、`2026-09-30 12:00:00.123` 形式） |
-| `host` | ホスト名 |
-| `address` | アドレス |
-| `mac` | MAC アドレス（取得できない場合は欠損） |
-| `item` | Item 名 |
+| `timestamp` | Time of the check (local time, `2026-09-30 12:00:00.123`) |
+| `host` | Host name |
+| `address` | Address |
+| `mac` | MAC address (missing if not found) |
+| `item` | Item name |
 | `type` | `icmp` / `tcp` |
-| `port` | ポート番号（ICMP では欠損） |
+| `port` | Port number (missing for ICMP) |
 | `status` | `ok` / `ng` |
-| `rtt_ms` | RTT（ミリ秒、丸めなし。NG では欠損） |
-| `error` | 失敗理由（OK では欠損） |
+| `rtt_ms` | RTT (ms, not rounded; missing on NG) |
+| `error` | Failure reason (missing on OK) |
 
-- **TSV**: タブ区切り。ファイルが空のときだけ先頭にヘッダ行を出力します。欠損値は空文字です。値に含まれるタブ・改行は空白に置き換えます
-- **JSON Lines**: 1行に1オブジェクト。欠損値は `null`、`port` と `rtt_ms` は数値です
+- **TSV**: tab-separated. A header line is written only when the file is empty. Missing values are empty. Tabs and newlines in values become spaces
+- **JSON Lines**: one object per line. Missing values are `null`; `port` and `rtt_ms` are numbers
 
-既存ファイルへは形式を確認せずに追記するため、異なる形式を同じファイルへ混在させないでください。
+Existing files are appended to without checking their format, so don't mix formats in one file.
 
 ```text
 timestamp	host	address	mac	item	type	port	status	rtt_ms	error
@@ -186,8 +188,8 @@ timestamp	host	address	mac	item	type	port	status	rtt_ms	error
 {"timestamp":"2026-09-16 12:00:01.456","host":"web-server","address":"example.com","mac":null,"item":"https","type":"tcp","port":443,"status":"ok","rtt_ms":45.67,"error":null}
 ```
 
-## 今後実装したい項目（未着手）
+## Planned (not started)
 
-- ARP/PING組み合わせ表示（同一サブネット判定含む4パターン）
-- フルスクリーン表示型CUI
-- GUI版
+- Combined ARP/PING view (4 patterns, including same-subnet check)
+- Full-screen CUI
+- GUI version

@@ -20,5 +20,7 @@ erl_crash.dump
 .vscode/
 
 # --- other editors ---
-*.swp           # Vim/エディタの一時ファイル 
-*~              # バックアップファイル 
+# Vim/editor swap files
+*.swp
+# Backup files
+*~

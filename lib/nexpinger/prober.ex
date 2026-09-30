@@ -1,11 +1,11 @@
 defmodule NexPinger.Prober do
   @moduledoc """
-  1回分の疎通確認を実行する。
-  ICMP は特権不要の方式で送る。
-    * Linux: ICMP datagram ソケット（`NexPinger.IcmpSocket`）。使えなければ ping コマンド
-    * Windows: IcmpSendEcho2 を呼ぶ補助プログラム（`NexPinger.IcmpHelper`）。使えなければ ping コマンド
-    * その他: OS の ping コマンド
-  TCP は :gen_tcp.connect の成否とRTTを計測する。
+  Runs one reachability check.
+  ICMP is sent without privileges:
+    * Linux: ICMP datagram socket (`NexPinger.IcmpSocket`), else the ping command
+    * Windows: IcmpSendEcho2 helper (`NexPinger.IcmpHelper`), else the ping command
+    * Other: the OS ping command
+  TCP: checks :gen_tcp.connect and measures the RTT.
   """
 
   alias NexPinger.{Host, IcmpHelper, IcmpSocket, Item}
@@ -17,7 +17,7 @@ defmodule NexPinger.Prober do
   def probe(%Host{} = host, %Item{type: :tcp} = item), do: tcp_probe(host, item)
 
   @doc """
-  この環境で ICMP 監視に使う方法を英語で返す（起動時の表示用）。
+  Returns the ICMP method used here, for the startup message.
   """
   @spec icmp_method() :: String.t()
   def icmp_method do
@@ -43,7 +43,7 @@ defmodule NexPinger.Prober do
   end
 
   @doc """
-  ICMP ソケットや補助プログラムを使わず、常に OS の ping コマンドを使うようにする（`--ping-command`）。
+  Always use the OS ping command, not the ICMP socket or helper (`--ping-command`).
   """
   @spec force_ping_command() :: :ok
   def force_ping_command, do: Application.put_env(:nexpinger, :force_ping_command, true)
@@ -86,7 +86,7 @@ defmodule NexPinger.Prober do
     end
   end
 
-  # Unix では出力を英語・小数点 "." に固定する（LANG によって "time=" の翻訳や "0,045" になるのを防ぐ）
+  # Unix: force English and "." decimals (LANG may localize "time=" or print "0,045")
   defp ping_cmd_opts do
     case :os.type() do
       {:unix, _} -> [stderr_to_stdout: true, env: [{"LC_ALL", "C"}]]
@@ -97,11 +97,11 @@ defmodule NexPinger.Prober do
   defp icmp_args(address, timeout_ms) do
     case :os.type() do
       {:unix, :darwin} ->
-        # macOS: -W はミリ秒
+        # macOS: -W in ms
         ["-c", "1", "-W", Integer.to_string(timeout_ms), address]
 
       {:unix, _linux} ->
-        # Linux: -W は秒（切り上げ、最低1秒）
+        # Linux: -W in seconds (rounded up, min 1)
         timeout_sec = max(1, div(timeout_ms + 999, 1000))
         ["-c", "1", "-W", Integer.to_string(timeout_sec), address]
 
@@ -110,10 +110,10 @@ defmodule NexPinger.Prober do
     end
   end
 
-  # Windows の ping.exe は表示言語で "time"/"ms" が翻訳され、環境変数で英語に固定できない。
-  # 言語に依存しない "TTL=" を手がかりに、その直前の "=<数値>" / "<<数値>" を RTT とする。
-  # 例: "時間 =10ms TTL=117", "Zeit<1ms TTL=128", "temps=10 ms TTL=117", "время=10мс TTL=117"
-  # "宛先ホストに到達できません" の応答行には TTL= が無いので、失敗として扱われる。
+  # Windows ping.exe localizes "time"/"ms", and no env var forces English.
+  # "TTL=" is never localized, so take the "=<n>" or "<<n>" just before it as the RTT.
+  # e.g. "時間 =10ms TTL=117", "Zeit<1ms TTL=128", "temps=10 ms TTL=117", "время=10мс TTL=117"
+  # "Destination host unreachable" lines have no TTL=, so they count as failures.
   @doc false
   @spec parse_ping_time(binary(), {atom(), atom()}) :: result()
   def parse_ping_time(output, {:win32, _}) do

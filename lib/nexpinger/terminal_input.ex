@@ -1,7 +1,7 @@
 defmodule NexPinger.TerminalInput do
   @moduledoc """
-  TTY が利用可能なとき、raw mode で統計画面のキー入力を処理する。
-  Unix では stty、Windows では OTP 26 以降の `:shell.start_interactive({:noshell, :raw})` を使う。
+  Handles stats screen key input in raw mode when a TTY is available.
+  Unix: stty. Windows: `:shell.start_interactive({:noshell, :raw})` (OTP 26+).
   """
 
   alias NexPinger.ConsoleSubscriber
@@ -68,7 +68,7 @@ defmodule NexPinger.TerminalInput do
     _error -> :unavailable
   end
 
-  # Windows には stty も /proc も無いため、OTP 26 以降の noshell raw mode を使う。
+  # Windows has no stty or /proc; use OTP 26+ noshell raw mode.
   defp windows_available? do
     Code.ensure_loaded?(:shell) and function_exported?(:shell, :start_interactive, 1)
   end

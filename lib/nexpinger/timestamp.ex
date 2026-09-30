@@ -1,6 +1,6 @@
 defmodule NexPinger.Timestamp do
   @moduledoc """
-  画面・ファイル出力で使う時刻文字列（ローカル時刻、`2026-09-30 12:00:00.123` 形式）を作る。
+  Timestamp string for screen and file output (local time, `2026-09-30 12:00:00.123`).
   """
 
   @spec now() :: String.t()

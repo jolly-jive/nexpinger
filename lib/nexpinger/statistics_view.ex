@@ -1,6 +1,6 @@
 defmodule NexPinger.StatisticsView do
   @moduledoc """
-  統計画面の固定幅テキストを生成する。
+  Builds the fixed-width text of the stats screen.
   """
 
   alias NexPinger.Statistics

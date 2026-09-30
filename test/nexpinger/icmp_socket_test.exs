@@ -34,7 +34,7 @@ defmodule NexPinger.IcmpSocketTest do
     end
   end
 
-  # ping_group_range の設定次第でどちらにもなりうる
+  # Either result is possible, depending on ping_group_range
   test "pings the loopback address, or reports the socket as unavailable" do
     if match?({:unix, :linux}, :os.type()) do
       case IcmpSocket.ping("127.0.0.1", 1000) do

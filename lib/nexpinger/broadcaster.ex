@@ -1,6 +1,6 @@
 defmodule NexPinger.Broadcaster do
   @moduledoc """
-  監視結果を複数の subscriber へ配信するイベントハブ。
+  Event hub that sends monitoring results to subscribers.
   """
 
   use GenServer

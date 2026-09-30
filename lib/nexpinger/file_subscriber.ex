@@ -1,9 +1,9 @@
 defmodule NexPinger.FileSubscriber do
   @moduledoc """
-  Broadcaster 経由で届いた監視結果をファイルへ書き込む subscriber.
+  Subscriber that writes results from the Broadcaster to a file.
 
-  出力形式は `:text`（画面と同じ固定幅テキスト）、`:tsv`（タブ区切りの生データ）、
-  `:jsonl`（1行1レコードの JSON）から選ぶ。
+  Formats: `:text` (same fixed-width text as the screen), `:tsv` (tab-separated raw data),
+  `:jsonl` (one JSON record per line).
   """
 
   use GenServer
@@ -29,7 +29,7 @@ defmodule NexPinger.FileSubscriber do
     File.mkdir_p!(Path.dirname(path))
     File.touch!(path)
 
-    # 既存ファイルへの追記時はヘッダを重ねない
+    # Don't repeat the header when appending
     if format == :tsv and File.stat!(path).size == 0 do
       append_line(path, tsv_header())
     end
@@ -48,7 +48,7 @@ defmodule NexPinger.FileSubscriber do
   end
 
   @doc """
-  1件の監視結果を、指定形式の1行（末尾改行付き）に整形する。
+  Formats one result as one line (with trailing newline) in the given format.
   """
   @spec format_record(
           format(),
@@ -93,7 +93,7 @@ defmodule NexPinger.FileSubscriber do
   end
 
   def format_record(:jsonl, timestamp, host, item, result) do
-    # キー順を仕様どおりに保つため、オブジェクトは自前で組み立てて値のエンコードだけ JSON に任せる
+    # Build the object by hand to keep key order; JSON encodes values only
     pairs =
       @fields
       |> Enum.zip(record_values(timestamp, host, item, result))

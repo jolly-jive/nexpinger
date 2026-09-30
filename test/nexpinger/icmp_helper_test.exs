@@ -1,10 +1,10 @@
 defmodule NexPinger.IcmpHelperTest do
-  # アプリが起動した名前付きプロセスとアプリ環境を差し替えるため async にしない
+  # Not async: replaces the app's named process and app env
   use ExUnit.Case, async: false
 
   alias NexPinger.IcmpHelper
 
-  # 偽の補助プログラムはシェルスクリプトで作るため Unix でのみ実行する
+  # Unix only: the fake helper is a shell script
   @moduletag skip: match?({:win32, _}, :os.type()) && "requires a Unix shell"
 
   @fake_helper """

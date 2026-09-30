@@ -1,6 +1,6 @@
 defmodule NexPinger.MacResolver do
   @moduledoc """
-  同一 IPv4 サブネット上のホストについて、近隣テーブルから MAC アドレスを取得する。
+  Looks up the MAC address of a host on the same IPv4 subnet from the neighbor table.
   """
 
   import Bitwise

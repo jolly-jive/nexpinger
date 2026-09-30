@@ -1,11 +1,11 @@
 defmodule NexPinger.IcmpSocket do
   @moduledoc """
-  Linux の特権不要 ICMP ソケット（SOCK_DGRAM + IPPROTO_ICMP / IPPROTO_ICMPV6）で
-  Echo を 1 回送り、RTT を計測する。
+  Sends one Echo over an unprivileged Linux ICMP socket
+  (SOCK_DGRAM + IPPROTO_ICMP / IPPROTO_ICMPV6) and measures the RTT.
 
-  ソケットを開けない場合（`net.ipv4.ping_group_range` に実行ユーザーのグループが
-  含まれていない、OTP が :socket に対応していない等）は `{:error, :unavailable}` を返す。
-  呼び出し側はこのとき ping コマンドにフォールバックする。
+  If the socket can't be opened (user's group not in `net.ipv4.ping_group_range`,
+  OTP without :socket, etc.), returns `{:error, :unavailable}`;
+  the caller then falls back to the ping command.
   """
 
   import Bitwise
@@ -55,8 +55,8 @@ defmodule NexPinger.IcmpSocket do
   end
 
   @doc """
-  ICMP ソケットが使えるかを調べる（IPv4 のソケットを開いてすぐ閉じる）。
-  使えない場合は英語の理由を返す。
+  Checks whether ICMP sockets work (opens and closes an IPv4 socket).
+  Returns the reason if not.
   """
   @spec availability() :: :ok | {:error, String.t()}
   def availability do
@@ -81,7 +81,7 @@ defmodule NexPinger.IcmpSocket do
     protocol = if family == :inet, do: :icmp, else: :"ipv6-icmp"
     :socket.open(family, :dgram, protocol)
   rescue
-    # OTP が :socket（NIF）無しでビルドされている場合
+    # OTP built without :socket (NIF)
     _error -> {:error, :socket_not_supported}
   catch
     _kind, _reason -> {:error, :socket_not_supported}
@@ -103,14 +103,14 @@ defmodule NexPinger.IcmpSocket do
     payload = :rand.bytes(@payload_size)
     {request_type, reply_type} = echo_types(family)
 
-    # identifier はカーネルがソケット固有の値に書き換え、その値に一致する応答だけを
-    # このソケットに配送する。ICMPv6 のチェックサムもカーネルが計算する。
+    # The kernel sets the identifier per socket and delivers only matching replies.
+    # It also computes the ICMPv6 checksum.
     packet = build_packet(request_type, 0, seq, payload, family == :inet)
 
     started = System.monotonic_time(:microsecond)
     deadline = started + timeout_ms * 1000
 
-    # connect しておくと、Destination Unreachable がソケットエラーとして返ってくる
+    # Once connected, Destination Unreachable arrives as a socket error
     with :ok <- :socket.connect(socket, %{family: family, addr: ip, port: 0}),
          :ok <- :socket.send(socket, packet, timeout_ms) do
       await_reply(socket, reply_type, seq, payload, started, deadline)

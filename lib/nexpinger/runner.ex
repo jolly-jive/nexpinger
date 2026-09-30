@@ -1,7 +1,7 @@
 defmodule NexPinger.Runner do
   @moduledoc """
-  ホスト上の1つの Item を監視するアクター。
-  Item ごとに独立したプロセスが interval ごとに probe を実行する。
+  Monitors one Item on a host.
+  One process per Item; probes every interval.
   """
 
   use GenServer

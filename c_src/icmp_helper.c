@@ -1,18 +1,18 @@
 /*
- * icmp_helper.exe - NexPinger 用の Windows ICMP 補助プログラム
+ * icmp_helper.exe - Windows ICMP helper for NexPinger
  *
- * IcmpSendEcho2 / Icmp6SendEcho2 で ICMP Echo を送る（管理者権限不要）。
- * ping.exe と違い、結果は表示言語に依存しない。
+ * Sends ICMP Echo via IcmpSendEcho2 / Icmp6SendEcho2 (no admin rights needed).
+ * Unlike ping.exe, output does not depend on the display language.
  *
- * 標準入力から 1 行 1 要求を読み、要求ごとにスレッドを起こして並行に処理する。
- * 応答は完了した順に標準出力へ 1 行ずつ書く。標準入力が閉じたら、処理中の要求に
- * 応答してから終了する。
+ * Reads one request per line from stdin and handles each in its own thread.
+ * Writes one reply per line to stdout, in completion order. On stdin close,
+ * replies to pending requests, then exits.
  *
- *   要求: <id> <address> <timeout_ms>
- *   応答: <id> ok <rtt_ms>
- *         <id> error <reason>
+ *   Request: <id> <address> <timeout_ms>
+ *   Reply:   <id> ok <rtt_ms>
+ *            <id> error <reason>
  *
- * ビルド（WSL / Linux / macOS）:
+ * Build (WSL / Linux / macOS):
  *   zig cc -target x86_64-windows-gnu -O2 -o priv/bin/icmp_helper.exe \
  *     c_src/icmp_helper.c -liphlpapi -lws2_32
  */
@@ -157,7 +157,7 @@ static void ping_v6(const struct request *req, struct sockaddr_in6 *dest)
     IcmpCloseHandle(icmp);
 }
 
-/* IPv4 を優先し、無ければ IPv6 で解決する（Linux 版 IcmpSocket と同じ順序） */
+/* Resolve IPv4 first, then IPv6 (same order as IcmpSocket on Linux) */
 static void ping(const struct request *req)
 {
     struct addrinfo hints;
@@ -233,7 +233,7 @@ int main(void)
             CloseHandle(thread);
     }
 
-    /* 標準入力が閉じたら、処理中の要求（最長でタイムアウトまで）に応答してから終了する */
+    /* stdin closed: reply to pending requests (up to their timeout), then exit */
     while (InterlockedCompareExchange(&active_requests, 0, 0) > 0)
         Sleep(10);
 

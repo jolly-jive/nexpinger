@@ -63,7 +63,7 @@ defmodule NexPinger.ConfigTest do
       """)
 
     assert {:error, message} = Config.load(path)
-    assert message =~ "には port の指定が必要です"
+    assert message =~ "needs a port"
   end
 
   defp write_config!(content) do
