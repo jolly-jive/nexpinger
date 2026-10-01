@@ -4,7 +4,15 @@ defmodule NexPinger.CLI do
   Usage: nexpinger [--log-file PATH [--log-format FORMAT]] [--no-stdout] [--help] [config file...]
   """
 
-  alias NexPinger.{Config, ConsoleSubscriber, FileSubscriber, Prober, Runner, TerminalInput}
+  alias NexPinger.{
+    Config,
+    ConsoleSubscriber,
+    FileSubscriber,
+    Prober,
+    Runner,
+    TerminalInput,
+    UdpProbe
+  }
 
   @usage """
   Usage: nexpinger [options] <config file>...
@@ -129,6 +137,8 @@ defmodule NexPinger.CLI do
           IO.puts("ICMP: #{Prober.icmp_method()}")
         end
 
+        Enum.each(ntp_warnings(hosts), &IO.puts(:stderr, &1))
+
         IO.puts(String.duplicate("-", 60))
 
         if log_file do
@@ -164,6 +174,21 @@ defmodule NexPinger.CLI do
       {:error, reason} ->
         IO.puts(:stderr, "Failed to load config: #{inspect(reason)}")
         System.halt(1)
+    end
+  end
+
+  @doc """
+  Warns about NTP items polled faster than NTP servers usually allow.
+  """
+  @spec ntp_warnings([NexPinger.Host.t()]) :: [String.t()]
+  def ntp_warnings(hosts) do
+    min_interval = UdpProbe.ntp_min_interval()
+
+    for host <- hosts,
+        item <- host.items,
+        item.type == :udp and item.service == :ntp and item.interval < min_interval do
+      "Warning: #{host.name}/#{item.name}: NTP interval #{item.interval} ms is under " <>
+        "#{min_interval} ms; servers may rate-limit or drop requests"
     end
   end
 

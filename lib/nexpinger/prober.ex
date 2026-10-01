@@ -6,15 +6,19 @@ defmodule NexPinger.Prober do
     * Windows: IcmpSendEcho2 helper (`NexPinger.IcmpHelper`), else the ping command
     * Other: the OS ping command
   TCP: checks :gen_tcp.connect and measures the RTT.
+  UDP: sends a service request and waits for any reply (`NexPinger.UdpProbe`).
   """
 
-  alias NexPinger.{Host, IcmpHelper, IcmpSocket, Item}
+  alias NexPinger.{Host, IcmpHelper, IcmpSocket, Item, UdpProbe}
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, reason :: String.t()}
 
   @spec probe(Host.t(), Item.t()) :: result()
   def probe(%Host{} = host, %Item{type: :icmp} = item), do: icmp_probe(host, item)
   def probe(%Host{} = host, %Item{type: :tcp} = item), do: tcp_probe(host, item)
+
+  def probe(%Host{address: address}, %Item{type: :udp} = item),
+    do: UdpProbe.probe(address, item.service, item.port, item.timeout)
 
   @doc """
   Returns the ICMP method used here, for the startup message.

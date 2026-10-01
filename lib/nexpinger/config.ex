@@ -3,7 +3,7 @@ defmodule NexPinger.Config do
   Loads a YAML or hosts-format config file into a list of NexPinger.Host.
   """
 
-  alias NexPinger.{Host, Item}
+  alias NexPinger.{Host, Item, UdpProbe}
 
   @spec load(String.t()) :: {:ok, [Host.t()]} | {:error, term()}
   def load(path) do
@@ -105,6 +105,7 @@ defmodule NexPinger.Config do
       case Map.get(map, "type", "icmp") do
         "icmp" -> :icmp
         "tcp" -> :tcp
+        "udp" -> :udp
         other -> raise "Unknown type: #{inspect(other)} (item: #{inspect(map["name"])})"
       end
 
@@ -112,12 +113,34 @@ defmodule NexPinger.Config do
       raise "Item #{inspect(map["name"])} (type: tcp) needs a port"
     end
 
+    service = if type == :udp, do: udp_service!(map)
+    port = map["port"] || (service && UdpProbe.services()[service])
+
     %Item{
       name: Map.fetch!(map, "name"),
       type: type,
-      port: map["port"],
-      interval: Map.get(map, "interval", 1000),
+      service: service,
+      port: port,
+      interval: Map.get(map, "interval", default_interval(service)),
       timeout: Map.get(map, "timeout", 1000)
     }
+  end
+
+  # NTP servers rate-limit fast polling, so NTP defaults to a slower interval
+  defp default_interval(:ntp), do: UdpProbe.ntp_min_interval()
+  defp default_interval(_service), do: 1000
+
+  defp udp_service!(map) do
+    names = UdpProbe.services() |> Map.keys() |> Enum.map(&Atom.to_string/1) |> Enum.sort()
+
+    case map["service"] do
+      nil ->
+        raise "Item #{inspect(map["name"])} (type: udp) needs a service (#{Enum.join(names, ", ")})"
+
+      name ->
+        if name in names,
+          do: String.to_existing_atom(name),
+          else: raise("Unknown service: #{inspect(name)} (item: #{inspect(map["name"])})")
+    end
   end
 end

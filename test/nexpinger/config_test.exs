@@ -66,6 +66,75 @@ defmodule NexPinger.ConfigTest do
     assert message =~ "needs a port"
   end
 
+  test "loads UDP items with a service and its default port" do
+    path =
+      write_config!("""
+      hosts:
+        - name: server
+          address: 192.168.1.1
+          items:
+            - name: dns
+              type: udp
+              service: dns
+            - name: ntp
+              type: udp
+              service: ntp
+              interval: 10000
+            - name: h3
+              type: udp
+              service: quic
+              port: 8443
+      """)
+
+    assert {:ok, [host]} = Config.load(path)
+
+    assert host.items == [
+             %Item{name: "dns", type: :udp, service: :dns, port: 53},
+             %Item{name: "ntp", type: :udp, service: :ntp, port: 123, interval: 10000},
+             %Item{name: "h3", type: :udp, service: :quic, port: 8443}
+           ]
+  end
+
+  test "defaults the NTP interval to 8000 ms" do
+    path =
+      write_config!("""
+      hosts:
+        - name: server
+          address: 192.168.1.1
+          items:
+            - name: ntp
+              type: udp
+              service: ntp
+            - name: dns
+              type: udp
+              service: dns
+      """)
+
+    assert {:ok, [host]} = Config.load(path)
+    assert Enum.map(host.items, & &1.interval) == [8000, 1000]
+  end
+
+  test "requires a known service for UDP items" do
+    for {service_line, expected} <- [
+          {"", "needs a service"},
+          {"service: snmp", "Unknown service"}
+        ] do
+      path =
+        write_config!("""
+        hosts:
+          - name: server
+            address: 192.168.1.1
+            items:
+              - name: udp
+                type: udp
+                #{service_line}
+        """)
+
+      assert {:error, message} = Config.load(path)
+      assert message =~ expected
+    end
+  end
+
   defp write_config!(content) do
     path = Path.join(System.tmp_dir!(), "nexpinger-config-#{System.unique_integer([:positive])}.yml")
     File.write!(path, content)

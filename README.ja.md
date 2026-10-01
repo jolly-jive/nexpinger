@@ -2,7 +2,7 @@
 
 [English](README.md) | 日本語
 
-複数のホストを ICMP / TCP で継続監視する、Elixir 製の CUI ツール。TTY では「Ping結果」と「Ping統計」を切り替えて表示できます。
+複数のホストを ICMP / TCP / UDP で継続監視する、Elixir 製の CUI ツール。TTY では「Ping結果」と「Ping統計」を切り替えて表示できます。
 
 複数のアドレスへ ping を実行する Windows 用ツール [ExPing](https://www.woodybells.com/exping.html) に触発されて作りました。
 
@@ -17,6 +17,7 @@
   - その他の OS: OS の `ping` コマンドを実行
   - 起動時に使用する方法（とフォールバックの理由）を `ICMP: ...` として表示
 - TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測）
+- UDP Ping（DNS / NTP / QUIC の要求を送り、応答の有無を確認。[UDP 監視](#udp-監視)を参照）
 - 1行1項目のストリーム出力（成功=緑 OK / 失敗=赤 NG）
 - TTY で `Tab` を押すと Ping結果の追記表示と Ping統計を切り替え
 - TTY で `Q` を押すと終了（`Ctrl+C` でも終了可能）
@@ -118,7 +119,7 @@ TTY では `Tab` で Ping結果と Ping統計を切り替え、統計画面で�
 
 ## 設定ファイル
 
-YAML 形式と `/etc/hosts` 形式を内容から自動判定します。hosts 形式では各有効行の IP アドレスと最初のホスト名を使って ICMP 監視を行います。追加の別名は同じホストを指すため個別の監視項目にはなりません。監視間隔とタイムアウトは Item の既定値（各1000ミリ秒）です。TCP 監視など詳細な設定には YAML 形式を使ってください。
+YAML 形式と `/etc/hosts` 形式を内容から自動判定します。hosts 形式では各有効行の IP アドレスと最初のホスト名を使って ICMP 監視を行います。追加の別名は同じホストを指すため個別の監視項目にはなりません。監視間隔とタイムアウトは Item の既定値（各1000ミリ秒）です。TCP / UDP 監視など詳細な設定には YAML 形式を使ってください。
 
 ### YAML (`config/hosts.yml`)
 
@@ -143,11 +144,39 @@ hosts:
         type: tcp
         port: 80
         interval: 5000
+
+  - name: dns-server
+    address: 192.168.1.10
+    items:
+      - name: dns
+        type: udp
+        service: dns
+        interval: 2000
+      - name: ntp
+        type: udp
+        service: ntp
+        interval: 10000
 ```
 
 - ホストは `name` と `address` を持ち、`items` に1つ以上の監視項目を定義します
-- Item は `name`、`type`（`icmp` または `tcp`）、`interval`（ミリ秒）、`timeout`（ミリ秒、省略時1000）を持ちます
+- Item は `name`、`type`（`icmp`、`tcp` または `udp`）、`interval`（ミリ秒）、`timeout`（ミリ秒、省略時1000）を持ちます
 - `port` は `type: tcp` の場合に必須です
+- `service`（`dns`、`ntp` または `quic`）は `type: udp` の場合に必須です。`port` を省略するとサービスの標準ポート（dns: 53、ntp: 123、quic: 443）を使います
+
+### UDP 監視
+
+UDP 監視では、サービスが応答する要求を送り、**応答の有無のみを判定します。応答の内容は検査しません。** 目的はネットワーク的な到達性の確認なので、DNS の NXDOMAIN や REFUSED、NTP の Kiss-o'-Death、形式の崩れた応答も OK として扱います。
+
+| `service` | 送信内容 |
+|---|---|
+| `dns` | `. SOA` の問い合わせ。RD=0（norec）、EDNS なし |
+| `ntp` | NTPv4 クライアント要求（mode 3）、48 バイト |
+| `quic` | 予約済みの未対応バージョン（`0x1a2a3a4a`）を持つ Long Header Initial。1200 バイトまで埋める。サーバは Version Negotiation を返す |
+
+- RTT は要求の送信から最初の応答までの時間です。RD=0 のため、DNS フルリゾルバは再帰問い合わせをせずキャッシュから応答（または拒否）し、RTT に再帰の時間は含まれません
+- `timeout` までに応答がなければ NG（`timeout`）です
+- ICMP Port Unreachable は UDP の応答ではないため NG（`port unreachable`）とします。TCP で RST を NG とするのと同じ扱いです。対象ホスト自身ではなくファイアウォール（iptables の `REJECT` など）が返すこともあります
+- 公開 NTP サーバの多くは問い合わせ頻度を制限しており、頻繁に問い合わせると Kiss-o'-Death を返したり要求を破棄したりします。そのため NTP の Item の `interval` は省略時 8000 ミリ秒とし、8000 ミリ秒未満を指定した場合は起動時に警告を表示します。自分で管理していないサーバには 8000 ミリ秒以上を指定してください
 
 ### hosts 形式
 
@@ -163,6 +192,7 @@ hosts:
 2026-09-16 12:00:00.123 | gateway/ping             (192.168.1.1    ) 00:00:5e:00:53:01 ICMP OK    1.23 ms
 2026-09-16 12:00:01.456 | web-server/https:443      (example.com    )                   TCP  OK   45.67 ms
 2026-09-16 12:00:02.789 | dns-server/ping           (192.168.1.10   )                   ICMP NG    timeout
+2026-09-16 12:00:03.012 | dns-server/dns:53         (192.168.1.10   )                   UDP  OK    2.34 ms
 ```
 
 時刻は画面・ファイルとも実行環境のローカル時刻です。同一 IP サブネット上で MAC アドレスを取得できた場合だけ表示し、取得できない場合も同じ幅の空白を確保します。`--log-format text`（既定）ではログファイルへも同じ形式で追記されます。`--no-stdout` を付けると、コンソール側には出力されず、ファイルのみに残ります。
@@ -178,7 +208,7 @@ hosts:
 | `address` | アドレス |
 | `mac` | MAC アドレス（取得できない場合は欠損） |
 | `item` | Item 名 |
-| `type` | `icmp` / `tcp` |
+| `type` | `icmp` / `tcp` / `udp` |
 | `port` | ポート番号（ICMP では欠損） |
 | `status` | `ok` / `ng` |
 | `rtt_ms` | RTT（ミリ秒、丸めなし。NG では欠損） |
@@ -202,6 +232,7 @@ timestamp	host	address	mac	item	type	port	status	rtt_ms	error
 ## 今後実装したい項目（未着手）
 
 - GUI版
+- UDP 監視のサービス追加（SNMPv3、STUN）
 
 ## ライセンス
 

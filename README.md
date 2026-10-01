@@ -2,7 +2,7 @@
 
 English | [日本語](README.ja.md)
 
-A CUI tool in Elixir that keeps monitoring many hosts over ICMP / TCP. On a TTY, you can switch between "Ping Results" and "Ping Statistics".
+A CUI tool in Elixir that keeps monitoring many hosts over ICMP / TCP / UDP. On a TTY, you can switch between "Ping Results" and "Ping Statistics".
 
 Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool that pings many addresses.
 
@@ -17,6 +17,7 @@ Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool tha
   - Other OSes: runs the OS `ping` command
   - Shows the method in use (and any fallback reason) at startup as `ICMP: ...`
 - TCP ping (checks `:gen_tcp.connect` and measures the RTT)
+- UDP ping (sends a DNS / NTP / QUIC request and waits for any reply; see [UDP checks](#udp-checks))
 - Streams one line per result (OK in green / NG in red)
 - On a TTY, `Tab` switches between the result stream and Ping Statistics
 - On a TTY, `Q` quits (`Ctrl+C` also works)
@@ -118,7 +119,7 @@ This writes results to the file and prints nothing to stdout.
 
 ## Config file
 
-YAML and `/etc/hosts` formats are detected from the content. In hosts format, each valid line's IP address and first host name become an ICMP check. Extra aliases point to the same host, so they are not separate checks. Interval and timeout use the Item defaults (1000 ms each). Use YAML for TCP checks and other settings.
+YAML and `/etc/hosts` formats are detected from the content. In hosts format, each valid line's IP address and first host name become an ICMP check. Extra aliases point to the same host, so they are not separate checks. Interval and timeout use the Item defaults (1000 ms each). Use YAML for TCP / UDP checks and other settings.
 
 ### YAML (`config/hosts.yml`)
 
@@ -143,11 +144,39 @@ hosts:
         type: tcp
         port: 80
         interval: 5000
+
+  - name: dns-server
+    address: 192.168.1.10
+    items:
+      - name: dns
+        type: udp
+        service: dns
+        interval: 2000
+      - name: ntp
+        type: udp
+        service: ntp
+        interval: 10000
 ```
 
 - A host has `name` and `address`, and one or more checks in `items`
-- An Item has `name`, `type` (`icmp` or `tcp`), `interval` (ms), and `timeout` (ms, default 1000)
+- An Item has `name`, `type` (`icmp`, `tcp` or `udp`), `interval` (ms), and `timeout` (ms, default 1000)
 - `port` is required for `type: tcp`
+- `service` (`dns`, `ntp` or `quic`) is required for `type: udp`. `port` defaults to the service's standard port (dns: 53, ntp: 123, quic: 443)
+
+### UDP checks
+
+A UDP check sends a request that makes the service reply, and **only checks whether a reply comes back. It does not inspect the reply content.** The goal is network reachability, so a DNS NXDOMAIN or REFUSED, an NTP Kiss-o'-Death, or a malformed reply all count as OK.
+
+| `service` | Request sent |
+|---|---|
+| `dns` | `. SOA` query, RD=0 (norec), no EDNS |
+| `ntp` | NTPv4 client request (mode 3), 48 bytes |
+| `quic` | Long header Initial with a reserved, unsupported version (`0x1a2a3a4a`), padded to 1200 bytes. The server replies with Version Negotiation |
+
+- RTT is the time from sending the request to the first reply. With RD=0, a DNS resolver answers from its cache (or refuses) without recursing, so the RTT does not include recursion time
+- No reply within `timeout` is NG (`timeout`)
+- An ICMP Port Unreachable is not a UDP reply, so it is NG (`port unreachable`). This matches TCP, where a RST is NG. It may also come from a firewall (e.g. iptables `REJECT`) rather than the target itself
+- Public NTP servers often rate-limit clients that poll too often, and may reply with Kiss-o'-Death or drop requests. So an NTP item's `interval` defaults to 8000 ms, and a warning is shown at startup if it is set under 8000 ms. Use 8000 ms or more for servers you don't run yourself
 
 ### hosts format
 
@@ -163,6 +192,7 @@ hosts:
 2026-09-16 12:00:00.123 | gateway/ping             (192.168.1.1    ) 00:00:5e:00:53:01 ICMP OK    1.23 ms
 2026-09-16 12:00:01.456 | web-server/https:443      (example.com    )                   TCP  OK   45.67 ms
 2026-09-16 12:00:02.789 | dns-server/ping           (192.168.1.10   )                   ICMP NG    timeout
+2026-09-16 12:00:03.012 | dns-server/dns:53         (192.168.1.10   )                   UDP  OK    2.34 ms
 ```
 
 Times are local time, on screen and in files. The MAC address is shown only when found on the same IP subnet; otherwise the same width is left blank. With `--log-format text` (default), the log file gets the same format. With `--no-stdout`, nothing goes to the console; results go only to the file.
@@ -178,7 +208,7 @@ Times are local time, on screen and in files. The MAC address is shown only when
 | `address` | Address |
 | `mac` | MAC address (missing if not found) |
 | `item` | Item name |
-| `type` | `icmp` / `tcp` |
+| `type` | `icmp` / `tcp` / `udp` |
 | `port` | Port number (missing for ICMP) |
 | `status` | `ok` / `ng` |
 | `rtt_ms` | RTT (ms, not rounded; missing on NG) |
@@ -202,6 +232,7 @@ timestamp	host	address	mac	item	type	port	status	rtt_ms	error
 ## Planned (not started)
 
 - GUI version
+- More UDP services (SNMPv3, STUN)
 
 ## License
 

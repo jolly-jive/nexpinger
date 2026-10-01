@@ -75,6 +75,19 @@ defmodule NexPinger.CLITest do
     assert message =~ "--log-file"
   end
 
+  test "warns about NTP items polled faster than 8000 ms" do
+    items = [
+      %NexPinger.Item{name: "fast", type: :udp, service: :ntp, port: 123, interval: 1000},
+      %NexPinger.Item{name: "slow", type: :udp, service: :ntp, port: 123, interval: 8000},
+      %NexPinger.Item{name: "dns", type: :udp, service: :dns, port: 53, interval: 1000}
+    ]
+
+    host = %NexPinger.Host{name: "server", address: "192.0.2.1", items: items}
+
+    assert [warning] = NexPinger.CLI.ntp_warnings([host])
+    assert warning =~ "server/fast"
+  end
+
   test "returns invalid options" do
     assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
              NexPinger.CLI.parse_options(["--unknown", "config/hosts.yml"])
