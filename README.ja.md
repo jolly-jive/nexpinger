@@ -4,6 +4,8 @@
 
 複数のホストを ICMP / TCP で継続監視する、Elixir 製の CUI ツール。TTY では「Ping結果」と「Ping統計」を切り替えて表示できます。
 
+複数のアドレスへ ping を実行する Windows 用ツール [ExPing](https://www.woodybells.com/exping.html) に触発されて作りました。
+
 ## 機能（現時点）
 
 - YAML設定ファイルからホストと監視項目（Item）を読み込み
@@ -25,6 +27,13 @@
 - `--no-stdout` でコンソール表示を無効化可能
 - `--help` でヘルプを表示可能
 - 同一 IP サブネット上の監視対象では、近隣テーブルから MAC アドレスを表示
+
+## ダウンロード
+
+ビルド済みのバイナリは [GitHub Releases](https://github.com/jolly-jive/nexpinger/releases) にあります。
+
+- `nexpinger`: escript。Erlang/OTP 27 以降が必要。escript には `icmp_helper.exe` を同梱できないため、Windows では ICMP に `ping.exe` を使う
+- `nexpinger.exe`: Windows 用の単体実行ファイル（Burrito）。Erlang は不要だが、Microsoft Visual C++ ランタイムが必要。初回起動時に `%APPDATA%\.burrito` 配下へ展開される
 
 ## セットアップ
 
@@ -61,6 +70,8 @@ mix escript.build
 ./nexpinger --stats-window 500 --stats-width 120 config/hosts.yml
 ./nexpinger --help
 ```
+
+escript には `priv/bin/icmp_helper.exe` を同梱できないため、Windows では `ping.exe` を使う。
 
 ### 3. Burrito で単体実行ファイルとしてビルドして実行
 

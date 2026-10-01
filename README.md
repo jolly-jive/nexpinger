@@ -4,6 +4,8 @@ English | [日本語](README.ja.md)
 
 A CUI tool in Elixir that keeps monitoring many hosts over ICMP / TCP. On a TTY, you can switch between "Ping Results" and "Ping Statistics".
 
+Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool that pings many addresses.
+
 ## Features (so far)
 
 - Loads hosts and checks (Items) from a YAML config file
@@ -25,6 +27,13 @@ A CUI tool in Elixir that keeps monitoring many hosts over ICMP / TCP. On a TTY,
 - `--no-stdout` turns off console output
 - `--help` shows help
 - For targets on the same IP subnet, shows the MAC address from the neighbor table
+
+## Download
+
+Prebuilt binaries are on [GitHub Releases](https://github.com/jolly-jive/nexpinger/releases).
+
+- `nexpinger`: escript. Needs Erlang/OTP 27 or later. On Windows, ICMP uses `ping.exe` because an escript can't bundle `icmp_helper.exe`
+- `nexpinger.exe`: single Windows executable (Burrito). No Erlang needed, but needs the Microsoft Visual C++ runtime. On first run, it unpacks itself under `%APPDATA%\.burrito`
 
 ## Setup
 
@@ -61,6 +70,8 @@ mix escript.build
 ./nexpinger --stats-window 500 --stats-width 120 config/hosts.yml
 ./nexpinger --help
 ```
+
+An escript can't bundle `priv/bin/icmp_helper.exe`, so on Windows it uses `ping.exe`.
 
 ### 3. Build and run as a single executable with Burrito
 
