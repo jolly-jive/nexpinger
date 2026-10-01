@@ -190,8 +190,6 @@ timestamp	host	address	mac	item	type	port	status	rtt_ms	error
 
 ## 今後実装したい項目（未着手）
 
-- ARP/PING組み合わせ表示（同一サブネット判定含む4パターン）
-- フルスクリーン表示型CUI
 - GUI版
 
 ## ライセンス

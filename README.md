@@ -190,8 +190,6 @@ timestamp	host	address	mac	item	type	port	status	rtt_ms	error
 
 ## Planned (not started)
 
-- Combined ARP/PING view (4 patterns, including same-subnet check)
-- Full-screen CUI
 - GUI version
 
 ## License
