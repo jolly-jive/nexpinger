@@ -1,0 +1,61 @@
+# Builds the escript and the Windows Burrito binary on a version tag push,
+# then attaches them to a draft GitHub Release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      # Oldest OTP that Elixir 1.20 supports, so the escript runs on more systems
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.20"
+
+      # Burrito 1.6 requires exactly this Zig version
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      # Burrito needs xz and 7z for Windows targets
+      - run: sudo apt-get update && sudo apt-get install -y xz-utils p7zip-full
+
+      - run: mix deps.get
+      - run: mix compile
+
+      - name: Check tag matches mix.exs version
+        run: |
+          version=$(mix run --no-compile --no-start -e 'IO.write(Mix.Project.config()[:version])')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match mix.exs version $version"
+            exit 1
+          fi
+
+      - run: mix test
+        env:
+          MIX_ENV: test
+
+      - run: mix escript.build
+      - run: mix release
+
+      - name: Collect assets
+        run: |
+          mkdir dist
+          cp nexpinger dist/nexpinger
+          cp burrito_out/nexpinger_windows.exe dist/nexpinger.exe
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/*
