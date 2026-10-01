@@ -229,9 +229,10 @@ timestamp	host	address	mac	item	type	port	status	rtt_ms	error
 {"timestamp":"2026-09-16 12:00:01.456","host":"web-server","address":"example.com","mac":null,"item":"https","type":"tcp","port":443,"status":"ok","rtt_ms":45.67,"error":null}
 ```
 
+There is no built-in graphing. For charts, feed TSV / JSON Lines logs to an external tool (Excel, Livebook, etc.).
+
 ## Planned (not started)
 
-- GUI version
 - More UDP services (SNMPv3, STUN)
 
 ## License

@@ -229,9 +229,10 @@ timestamp	host	address	mac	item	type	port	status	rtt_ms	error
 {"timestamp":"2026-09-16 12:00:01.456","host":"web-server","address":"example.com","mac":null,"item":"https","type":"tcp","port":443,"status":"ok","rtt_ms":45.67,"error":null}
 ```
 
+グラフ表示などの可視化機能は内蔵していません。TSV / JSON Lines のログを外部ツール（Excel、Livebook など）に読み込んで行う想定です。
+
 ## 今後実装したい項目（未着手）
 
-- GUI版
 - UDP 監視のサービス追加（SNMPv3、STUN）
 
 ## ライセンス
