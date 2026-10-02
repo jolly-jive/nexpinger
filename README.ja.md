@@ -26,7 +26,7 @@
 - 監視結果を stdout とログファイルの両方へ出力可能
 - ログファイルの形式を text / TSV / JSON Lines から選択可能（`--log-format`）
 - `--no-stdout` でコンソール表示を無効化可能
-- `--help` でヘルプを表示可能
+- `--help` でヘルプ、`--version` でバージョンを表示可能
 - オンリンクの監視対象では、近隣テーブル（ARP / NDP、IPv4・IPv6、Linux・Windows）から MAC アドレスを表示
 
 ## ダウンロード
@@ -100,6 +100,7 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=windows
 - `--stats-window N`: 平均・P95・P99 を計算する直近試行数（既定値1000、1以上）
 - `--stats-width N`: 統計画面の幅（80または120桁、省略時は端末幅から選択）
 - `--ping-command`: ICMP ソケット（Linux）や `icmp_helper.exe`（Windows）を使わず、常に OS の `ping` コマンドで ICMP 監視を行う
+- `--version`: バージョンを表示
 - `--help`: ヘルプを表示
 - `config file`: 監視設定ファイルのパス（1つ以上必須。複数指定時はすべて読み込み）
 

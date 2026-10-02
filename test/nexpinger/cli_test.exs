@@ -98,6 +98,14 @@ defmodule NexPinger.CLITest do
     assert message =~ "ng: no-such-host.invalid (family: ipv4): unknown host"
   end
 
+  test "parses the version flag" do
+    assert {[version: true], [], []} = NexPinger.CLI.parse_options(["--version"])
+  end
+
+  test "reports the mix.exs version" do
+    assert NexPinger.CLI.version_string() == "NexPinger #{Mix.Project.config()[:version]}"
+  end
+
   test "returns invalid options" do
     assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
              NexPinger.CLI.parse_options(["--unknown", "config/hosts.yml"])

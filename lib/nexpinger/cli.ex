@@ -1,7 +1,7 @@
 defmodule NexPinger.CLI do
   @moduledoc """
   escript entry point.
-  Usage: nexpinger [--log-file PATH [--log-format FORMAT]] [--no-stdout] [--help] [config file...]
+  Usage: nexpinger [--log-file PATH [--log-format FORMAT]] [--no-stdout] [--version] [--help] [config file...]
   """
 
   alias NexPinger.{
@@ -24,9 +24,12 @@ defmodule NexPinger.CLI do
     --stats-window N    use the last N attempts for RTT statistics (default: 1000)
     --stats-width N     use an 80- or 120-column statistics layout
     --ping-command      always use the OS ping command for ICMP
+    --version           show the version
     --help              show this help message
 
   """
+
+  @version Mix.Project.config()[:version]
 
   @spec parse_options([String.t()]) :: {keyword(), [String.t()], [String.t()]}
   def parse_options(argv) do
@@ -38,6 +41,7 @@ defmodule NexPinger.CLI do
         stats_window: :integer,
         stats_width: :integer,
         ping_command: :boolean,
+        version: :boolean,
         help: :boolean
       ]
     )
@@ -51,6 +55,11 @@ defmodule NexPinger.CLI do
       IO.puts(:stderr, "Invalid option: #{invalid_options}")
       IO.puts(:stderr, @usage)
       System.halt(1)
+    end
+
+    if Keyword.get(opts, :version, false) do
+      IO.puts(version_string())
+      System.halt(0)
     end
 
     validate_stats_options!(opts)
@@ -88,6 +97,9 @@ defmodule NexPinger.CLI do
         run(paths, log_file, log_format, stdout_enabled, stats_window, requested_stats_width)
     end
   end
+
+  @spec version_string() :: String.t()
+  def version_string, do: "NexPinger #{@version}"
 
   @doc """
   Validates `--log-format` and returns the log file format. Error if given without `--log-file`.

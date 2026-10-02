@@ -26,7 +26,7 @@ Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool tha
 - Results can go to stdout and a log file at the same time
 - Log file format: text / TSV / JSON Lines (`--log-format`)
 - `--no-stdout` turns off console output
-- `--help` shows help
+- `--help` shows help, `--version` shows the version
 - For on-link targets, shows the MAC address from the neighbor table (ARP / NDP, IPv4 and IPv6; Linux and Windows)
 
 ## Download
@@ -100,6 +100,7 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=windows
 - `--stats-window N`: number of recent attempts for average / P95 / P99 (default 1000, min 1)
 - `--stats-width N`: stats screen width (80 or 120 columns; picked from the terminal width if omitted)
 - `--ping-command`: always use the OS `ping` command for ICMP, not the ICMP socket (Linux) or `icmp_helper.exe` (Windows)
+- `--version`: show the version
 - `--help`: show help
 - `config file`: path to a config file (at least one; all are loaded if several)
 
