@@ -52,6 +52,37 @@ defmodule Mix.Tasks.Compile.IcmpHelper do
   end
 end
 
+defmodule NexPinger.BurritoPrune do
+  @moduledoc """
+  Burrito step (after :patch): removes what the release does not use.
+
+  Burrito copies every DLL / EXE of the Windows OTP into lib/, used or not
+  (crypto with OpenSSL, wx with WebView2, ...). This keeps only the lib dirs
+  of the release's apps, and drops ERTS debug builds and PDB files.
+  Less to ship, and less third-party code to give notices for.
+  """
+
+  # Burrito is prod only, so take the context as a plain map
+  def execute(context) do
+    keep =
+      for {app, props} <- context.mix_release.applications,
+          do: "#{app}-#{props[:vsn]}"
+
+    lib_dirs = Path.wildcard(Path.join(context.work_dir, "lib/*"))
+    debug_files = Path.wildcard(Path.join(context.work_dir, "erts-*/bin/{*.pdb,beam.debug.*}"))
+
+    for path <- lib_dirs, Path.basename(path) not in keep do
+      File.rm_rf!(path)
+      Mix.shell().info("Pruned #{Path.relative_to(path, context.work_dir)}")
+    end
+
+    Enum.each(debug_files, &File.rm!/1)
+    Mix.shell().info("Pruned #{length(debug_files)} ERTS debug files")
+
+    context
+  end
+end
+
 defmodule NexPinger.MixProject do
   use Mix.Project
 
@@ -95,7 +126,8 @@ defmodule NexPinger.MixProject do
         burrito: [
           targets: [
             windows: [os: :windows, cpu: :x86_64]
-          ]
+          ],
+          extra_steps: [patch: [post: [NexPinger.BurritoPrune]]]
         ]
       ]
     ]
