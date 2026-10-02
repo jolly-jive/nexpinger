@@ -240,4 +240,6 @@ timestamp	host	address	resolved	mac	item	type	port	status	rtt_ms	error
 
 ## ライセンス
 
-[Apache License 2.0](LICENSE) で公開しています。
+Copyright 2026 Cayenne Ryo
+
+[Apache License 2.0](LICENSE) で公開しています。[NOTICE](NOTICE) も参照してください。

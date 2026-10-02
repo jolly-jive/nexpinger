@@ -240,4 +240,6 @@ There is no built-in graphing. For charts, feed TSV / JSON Lines logs to an exte
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+Copyright 2026 Cayenne Ryo
+
+Licensed under the [Apache License 2.0](LICENSE). See also [NOTICE](NOTICE).
