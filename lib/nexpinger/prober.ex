@@ -82,7 +82,7 @@ defmodule NexPinger.Prober do
 
     case Task.yield(task, timeout + 500) || Task.shutdown(task, :brutal_kill) do
       {:ok, {output, 0}} ->
-        parse_ping_time(output, :os.type())
+        parse_ping_time(output, :os.type(), address)
 
       {:ok, {_output, _exit_code}} ->
         {:error, "unreachable"}
@@ -117,19 +117,27 @@ defmodule NexPinger.Prober do
   end
 
   # Windows ping.exe localizes "time"/"ms", and no env var forces English.
-  # "TTL=" is never localized, so take the "=<n>" or "<<n>" just before it as the RTT.
+  # IPv4: "TTL=" is never localized, so take the "=<n>" or "<<n>" just before it as the RTT.
   # e.g. "時間 =10ms TTL=117", "Zeit<1ms TTL=128", "temps=10 ms TTL=117", "время=10мс TTL=117"
-  # "Destination host unreachable" lines have no TTL=, so they count as failures.
+  # IPv6 replies have no TTL=. Take the first "=<n>" or "<<n>" after "<address>...:" on the
+  # reply line, e.g. "Reply from ::1: time<1ms", "::1 からの応答: 時間 <1ms".
+  # The address lines before and after (header, statistics) have no "=<n>".
+  # "Destination host unreachable" lines have neither, so they count as failures.
   @doc false
-  @spec parse_ping_time(binary(), {atom(), atom()}) :: result()
-  def parse_ping_time(output, {:win32, _}) do
-    case Regex.run(~r/[=<]\s*(\d+)[^=<\r\n]*?TTL=/, output) do
+  @spec parse_ping_time(binary(), {atom(), atom()}, String.t()) :: result()
+  def parse_ping_time(output, {:win32, _}, address) do
+    pattern =
+      if String.contains?(address, ":"),
+        do: ~r/#{Regex.escape(address)}[^\r\n]*?:[^\r\n]*?[=<]\s*(\d+)/,
+        else: ~r/[=<]\s*(\d+)[^=<\r\n]*?TTL=/
+
+    case Regex.run(pattern, output) do
       [_, ms] -> {:ok, String.to_integer(ms) * 1.0}
       nil -> {:error, "no reply"}
     end
   end
 
-  def parse_ping_time(output, _os_type) do
+  def parse_ping_time(output, _os_type, _address) do
     case Regex.run(~r/time[=<]([\d.]+)\s*ms/i, output) do
       [_, ms] -> {:ok, String.to_float(normalize_float(ms))}
       nil -> {:error, "no reply"}
