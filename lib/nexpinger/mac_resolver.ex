@@ -1,102 +1,102 @@
 defmodule NexPinger.MacResolver do
   @moduledoc """
-  Looks up the MAC address of a host on the same IPv4 subnet from the neighbor table.
+  Looks up the MAC address of an IP in the OS neighbor table (ARP / NDP).
+  Only on-link hosts are in the table, so others get nil.
+    * Linux: `ip neigh show <ip>` (IPv4 and IPv6)
+    * Windows: the helper (`NexPinger.IcmpHelper.mac/1`), else `arp -a` (IPv4 only)
+    * Other: nil
+
+  Results, nil included, are cached per IP for 15 s. Items of a host share one lookup,
+  and off-link hosts don't run a command on every probe. 15 s is the shortest
+  REACHABLE time of Linux and Windows, so the cache adds little to the OS's own delay.
   """
 
-  import Bitwise
+  use GenServer
+
+  alias NexPinger.{IcmpHelper, Resolver}
+
+  @table __MODULE__
+  @ttl_ms 15_000
+
+  def start_link(_opts \\ []) do
+    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+  end
+
+  @impl true
+  def init(:ok) do
+    :ets.new(@table, [:named_table, :public, read_concurrency: true])
+    {:ok, nil}
+  end
 
   @spec lookup(String.t()) :: String.t() | nil
-  def lookup(address) do
-    with {:ok, ip} <- :inet.getaddr(to_charlist(address), :inet),
-         true <- same_subnet?(ip),
-         {:ok, mac} <- neighbor_mac(ip) do
-      mac
-    else
-      _ -> nil
-    end
-  end
+  def lookup(ip), do: cached(ip, System.monotonic_time(:millisecond), &neighbor_mac/1)
 
-  @spec same_subnet?({byte(), byte(), byte(), byte()}, list() | nil) :: boolean()
-  def same_subnet?(target_ip, interfaces \\ nil) do
-    interface_list =
-      case interfaces || local_interfaces() do
-        {:ok, interfaces} ->
-          interfaces
+  @doc false
+  @spec cached(String.t(), integer(), (String.t() -> String.t() | nil)) :: String.t() | nil
+  def cached(ip, now, fetch) do
+    case :ets.lookup(@table, ip) do
+      [{^ip, mac, fetched_at}] when now - fetched_at < @ttl_ms ->
+        mac
 
-        interfaces when is_list(interfaces) ->
-          interfaces
-
-        _ ->
-          []
-      end
-
-    Enum.any?(interface_list, fn {local_ip, _broadcast, netmask} ->
-      same_network?(target_ip, local_ip, netmask)
-    end)
-  end
-
-  defp local_interfaces do
-    case :inet.getif() do
-      {:ok, interfaces} ->
-        {:ok, interfaces}
-
-      error ->
-        error
+      _ ->
+        mac = fetch.(ip)
+        :ets.insert(@table, {ip, mac, now})
+        mac
     end
   end
 
   defp neighbor_mac(ip) do
     case :os.type() do
-      {:unix, _} -> lookup_with_ip_command(ip)
-      {:win32, _} -> lookup_with_arp_command(ip)
+      {:unix, :linux} -> ip_neigh(ip)
+      {:win32, _} -> helper_mac(ip)
+      _ -> nil
     end
   end
 
-  defp lookup_with_ip_command(ip) do
-    {output, exit_code} =
-      System.cmd("ip", ["neigh", "show", ip_to_string(ip)], stderr_to_stdout: true)
-
-    if exit_code == 0 do
-      parse_ip_neighbor(output)
-    else
-      {:error, :not_found}
+  defp ip_neigh(ip) do
+    case System.cmd("ip", ["neigh", "show", ip], stderr_to_stdout: true, env: [{"LC_ALL", "C"}]) do
+      {output, 0} -> parse_ip_neigh(output)
+      _ -> nil
     end
   rescue
-    _error -> {:error, :unavailable}
+    _error -> nil
   end
 
-  defp lookup_with_arp_command(ip) do
-    {output, exit_code} = System.cmd("arp", ["-a", ip_to_string(ip)], stderr_to_stdout: true)
+  defp helper_mac(ip) do
+    case IcmpHelper.mac(ip) do
+      {:ok, mac} -> mac
+      {:error, :unavailable} -> arp(ip)
+      {:error, _reason} -> nil
+    end
+  end
 
-    if exit_code == 0 do
+  defp arp(ip) do
+    with :ipv4 <- Resolver.literal_family(ip),
+         {output, 0} <- System.cmd("arp", ["-a", ip], stderr_to_stdout: true) do
       parse_arp(output)
     else
-      {:error, :not_found}
+      _ -> nil
     end
   rescue
-    _error -> {:error, :unavailable}
+    _error -> nil
   end
 
-  defp parse_ip_neighbor(output) do
+  # FAILED / INCOMPLETE entries have no lladdr. STALE ones do, and are used.
+  @doc false
+  @spec parse_ip_neigh(String.t()) :: String.t() | nil
+  def parse_ip_neigh(output) do
     case Regex.run(~r/\blladdr\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})\b/i, output) do
-      [_, mac] -> {:ok, String.downcase(mac)}
-      nil -> {:error, :not_found}
+      [_, mac] -> String.downcase(mac)
+      nil -> nil
     end
   end
 
-  defp parse_arp(output) do
+  @doc false
+  @spec parse_arp(String.t()) :: String.t() | nil
+  def parse_arp(output) do
     case Regex.run(~r/\b([0-9a-f]{2}(?:[:-][0-9a-f]{2}){5})\b/i, output) do
-      [_, mac] -> {:ok, String.downcase(String.replace(mac, "-", ":"))}
-      nil -> {:error, :not_found}
+      [_, mac] -> mac |> String.replace("-", ":") |> String.downcase()
+      nil -> nil
     end
   end
-
-  defp same_network?({a, b, c, d}, {e, f, g, h}, {mask_a, mask_b, mask_c, mask_d}) do
-    band(a, mask_a) == band(e, mask_a) and
-      band(b, mask_b) == band(f, mask_b) and
-      band(c, mask_c) == band(g, mask_c) and
-      band(d, mask_d) == band(h, mask_d)
-  end
-
-  defp ip_to_string({a, b, c, d}), do: Enum.join([a, b, c, d], ".")
 end

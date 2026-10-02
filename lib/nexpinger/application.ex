@@ -12,7 +12,8 @@ defmodule NexPinger.Application do
        name: NexPinger.MonitorSupervisor},
       NexPinger.Broadcaster,
       NexPinger.ConsoleSubscriber,
-      NexPinger.IcmpHelper
+      NexPinger.IcmpHelper,
+      NexPinger.MacResolver
     ]
 
     {:ok, supervisor} =

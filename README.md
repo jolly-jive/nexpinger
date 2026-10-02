@@ -27,7 +27,7 @@ Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool tha
 - Log file format: text / TSV / JSON Lines (`--log-format`)
 - `--no-stdout` turns off console output
 - `--help` shows help
-- For targets on the same IP subnet, shows the MAC address from the neighbor table
+- For on-link targets, shows the MAC address from the neighbor table (ARP / NDP, IPv4 and IPv6; Linux and Windows)
 
 ## Download
 
@@ -197,7 +197,7 @@ A UDP check sends a request that makes the service reply, and **only checks whet
 2026-09-16 12:00:03.012 | dns-server/dns:53       (192.168.1.10            )                   UDP  OK    2.34 ms
 ```
 
-Times are local time, on screen and in files. The MAC address is shown only when found on the same IP subnet; otherwise the same width is left blank. When `address` is a host name, the resolved IP is shown with it as `name=IP`. The address column width is set at startup from the config (15 to 24 columns). Text that does not fit is cut: first the name from the right, then the name is dropped, and the IP is cut from the left (keeping the IPv6 interface ID). With `--log-format text` (default), the log file gets the same format, but the address is never cut there. With `--no-stdout`, nothing goes to the console; results go only to the file.
+Times are local time, on screen and in files. The MAC address is shown only when found in the neighbor table, which holds on-link hosts only; otherwise the same width is left blank. Lookups are cached per IP for 15 s. When `address` is a host name, the resolved IP is shown with it as `name=IP`. The address column width is set at startup from the config (15 to 24 columns). Text that does not fit is cut: first the name from the right, then the name is dropped, and the IP is cut from the left (keeping the IPv6 interface ID). With `--log-format text` (default), the log file gets the same format, but the address is never cut there. With `--no-stdout`, nothing goes to the console; results go only to the file.
 
 ### Log file formats
 
