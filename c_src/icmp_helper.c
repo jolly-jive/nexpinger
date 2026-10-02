@@ -3,14 +3,18 @@
  *
  * Sends ICMP Echo via IcmpSendEcho2 / Icmp6SendEcho2 (no admin rights needed).
  * Unlike ping.exe, output does not depend on the display language.
+ * Also looks up MAC addresses in the neighbor table (ARP / NDP) via GetIpNetEntry2.
  *
- * Reads one request per line from stdin and handles each in its own thread.
- * Writes one reply per line to stdout, in completion order. On stdin close,
- * replies to pending requests, then exits.
+ * Reads one request per line from stdin. Each ping runs in its own thread;
+ * mac is answered at once. Writes one reply per line to stdout, in completion
+ * order. On stdin close, replies to pending requests, then exits.
+ * Addresses are IP literals; names are not resolved.
  *
- *   Request: <id> <address> <timeout_ms>
+ *   Request: <id> ping <address> <timeout_ms>
+ *            <id> mac <address>
  *   Reply:   <id> ok <rtt_ms>
- *            <id> error <reason>
+ *            <id> ok <mac>              (aa:bb:cc:dd:ee:ff)
+ *            <id> error <reason>        (mac: "not found" if not in the table)
  *
  * Build (WSL / Linux / macOS):
  *   zig cc -target x86_64-windows-gnu -O2 -o priv/bin/icmp_helper.exe \
@@ -33,11 +37,12 @@
 #define PAYLOAD_SIZE 32
 #define REPLY_BUFFER_SIZE 1024
 #define ID_SIZE 32
+#define COMMAND_SIZE 16
 #define ADDRESS_SIZE 256
 
 struct request {
     char id[ID_SIZE];
-    char address[ADDRESS_SIZE];
+    SOCKADDR_INET address;
     DWORD timeout_ms;
 };
 
@@ -157,37 +162,86 @@ static void ping_v6(const struct request *req, struct sockaddr_in6 *dest)
     IcmpCloseHandle(icmp);
 }
 
-/* Resolve IPv4 first, then IPv6 (same order as IcmpSocket on Linux) */
-static void ping(const struct request *req)
-{
-    struct addrinfo hints;
-    struct addrinfo *result = NULL;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    if (getaddrinfo(req->address, NULL, &hints, &result) == 0 && result != NULL) {
-        ping_v4(req, (const struct sockaddr_in *)result->ai_addr);
-        freeaddrinfo(result);
-        return;
-    }
-
-    hints.ai_family = AF_INET6;
-    if (getaddrinfo(req->address, NULL, &hints, &result) == 0 && result != NULL) {
-        ping_v6(req, (struct sockaddr_in6 *)result->ai_addr);
-        freeaddrinfo(result);
-        return;
-    }
-
-    reply_error(req->id, "unknown host");
-}
-
 static DWORD WINAPI ping_thread(LPVOID arg)
 {
     struct request *req = (struct request *)arg;
-    ping(req);
+
+    if (req->address.si_family == AF_INET)
+        ping_v4(req, &req->address.Ipv4);
+    else
+        ping_v6(req, &req->address.Ipv6);
+
     free(req);
     InterlockedDecrement(&active_requests);
     return 0;
+}
+
+static int parse_address(const char *text, SOCKADDR_INET *address)
+{
+    memset(address, 0, sizeof(*address));
+
+    if (inet_pton(AF_INET, text, &address->Ipv4.sin_addr) == 1) {
+        address->si_family = AF_INET;
+        return 1;
+    }
+    if (inet_pton(AF_INET6, text, &address->Ipv6.sin6_addr) == 1) {
+        address->si_family = AF_INET6;
+        return 1;
+    }
+    return 0;
+}
+
+/* GetIpNetEntry2 needs the interface as well as the address: use the route's */
+static void lookup_mac(const char *id, const SOCKADDR_INET *address)
+{
+    MIB_IPNET_ROW2 row;
+    DWORD index;
+    char mac[18];
+
+    if (GetBestInterfaceEx((struct sockaddr *)address, &index) != NO_ERROR) {
+        reply_error(id, "not found");
+        return;
+    }
+
+    memset(&row, 0, sizeof(row));
+    row.Address = *address;
+    row.InterfaceIndex = index;
+
+    if (GetIpNetEntry2(&row) != NO_ERROR || row.PhysicalAddressLength != 6 ||
+        row.State == NlnsUnreachable || row.State == NlnsIncomplete) {
+        reply_error(id, "not found");
+        return;
+    }
+
+    snprintf(mac, sizeof(mac), "%02x:%02x:%02x:%02x:%02x:%02x", row.PhysicalAddress[0],
+             row.PhysicalAddress[1], row.PhysicalAddress[2], row.PhysicalAddress[3],
+             row.PhysicalAddress[4], row.PhysicalAddress[5]);
+
+    EnterCriticalSection(&output_lock);
+    printf("%s ok %s\n", id, mac);
+    fflush(stdout);
+    LeaveCriticalSection(&output_lock);
+}
+
+static void start_ping(const char *id, const SOCKADDR_INET *address, unsigned long timeout_ms)
+{
+    struct request *req = (struct request *)calloc(1, sizeof(struct request));
+
+    if (req == NULL) {
+        reply_error(id, "out of memory");
+        return;
+    }
+
+    strcpy(req->id, id);
+    req->address = *address;
+    req->timeout_ms = timeout_ms > 0 ? (DWORD)timeout_ms : 1;
+
+    InterlockedIncrement(&active_requests);
+    HANDLE thread = CreateThread(NULL, 0, ping_thread, req, 0, NULL);
+    if (thread == NULL)
+        ping_thread(req);
+    else
+        CloseHandle(thread);
 }
 
 int main(void)
@@ -207,30 +261,26 @@ int main(void)
     QueryPerformanceFrequency(&qpc_frequency);
 
     while (fgets(line, sizeof(line), stdin) != NULL) {
-        struct request *req = (struct request *)calloc(1, sizeof(struct request));
+        char id[ID_SIZE];
+        char command[COMMAND_SIZE];
+        char text[ADDRESS_SIZE];
+        SOCKADDR_INET address;
         unsigned long timeout_ms = 0;
-
-        if (req == NULL)
-            continue;
 
         line[strcspn(line, "\r\n")] = '\0';
 
-        int fields = sscanf(line, "%31s %255s %lu", req->id, req->address, &timeout_ms);
-        if (fields != 3) {
-            if (fields >= 1)
-                reply_error(req->id, "bad request");
-            free(req);
+        int fields = sscanf(line, "%31s %15s %255s %lu", id, command, text, &timeout_ms);
+        if (fields < 1)
             continue;
-        }
 
-        req->timeout_ms = timeout_ms > 0 ? (DWORD)timeout_ms : 1;
-
-        InterlockedIncrement(&active_requests);
-        HANDLE thread = CreateThread(NULL, 0, ping_thread, req, 0, NULL);
-        if (thread == NULL)
-            ping_thread(req);
+        if (fields >= 3 && !parse_address(text, &address))
+            reply_error(id, "invalid address");
+        else if (fields == 4 && strcmp(command, "ping") == 0)
+            start_ping(id, &address, timeout_ms);
+        else if (fields == 3 && strcmp(command, "mac") == 0)
+            lookup_mac(id, &address);
         else
-            CloseHandle(thread);
+            reply_error(id, "bad request");
     }
 
     /* stdin closed: reply to pending requests (up to their timeout), then exit */

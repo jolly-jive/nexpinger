@@ -9,10 +9,12 @@ defmodule NexPinger.IcmpHelperTest do
 
   @fake_helper """
   #!/bin/sh
-  while read id address timeout; do
-    case "$address" in
-      unreachable) echo "$id error unreachable" ;;
-      slow) (sleep 0.3; echo "$id ok 300.000") & ;;
+  while read id command address timeout; do
+    case "$command $address" in
+      "mac 192.0.2.99") echo "$id error not found" ;;
+      mac*) echo "$id ok 00:00:5e:00:53:01" ;;
+      *unreachable) echo "$id error unreachable" ;;
+      *slow) (sleep 0.3; echo "$id ok 300.000") & ;;
       *) echo "$id ok 1.500" ;;
     esac
   done
@@ -61,9 +63,15 @@ defmodule NexPinger.IcmpHelperTest do
     assert Task.await(slow) == {:ok, 300.0}
   end
 
+  test "returns the MAC address reported by the helper" do
+    assert IcmpHelper.mac("192.0.2.1") == {:ok, "00:00:5e:00:53:01"}
+    assert IcmpHelper.mac("192.0.2.99") == {:error, "not found"}
+  end
+
   test "rejects addresses that would break the line protocol" do
     assert IcmpHelper.ping("a b", 1000) == {:error, "invalid address"}
     assert IcmpHelper.ping("", 1000) == {:error, "invalid address"}
+    assert IcmpHelper.mac("a b") == {:error, "invalid address"}
   end
 
   @tag script: @broken_helper

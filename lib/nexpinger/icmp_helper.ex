@@ -3,6 +3,7 @@ defmodule NexPinger.IcmpHelper do
   Windows only. Sends ICMP Echo via a helper that calls IcmpSendEcho2 / Icmp6SendEcho2
   (`priv/bin/icmp_helper.exe`, source `c_src/icmp_helper.c`), kept running as a port.
   Unlike ping.exe, results do not depend on the display language.
+  The helper also looks up MAC addresses in the neighbor table (GetIpNetEntry2).
 
   The helper starts on the first request. If it exits after replying, it restarts on the
   next request. If it is missing, fails to start, or exits without ever replying, returns
@@ -10,18 +11,22 @@ defmodule NexPinger.IcmpHelper do
 
   Override the helper path with `config :nexpinger, :icmp_helper_path` (for tests).
 
-  Protocol (one message per line, replies in completion order):
+  Protocol (one message per line, replies in completion order; addresses are IP literals):
 
-      Request: <id> <address> <timeout_ms>
+      Request: <id> ping <address> <timeout_ms>
+               <id> mac <address>
       Reply:   <id> ok <rtt_ms>
+               <id> ok <mac>
                <id> error <reason>
   """
 
   use GenServer
 
   @executable "icmp_helper.exe"
+  @mac_timeout 5_000
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, String.t()} | {:error, :unavailable}
+  @type mac_result :: {:ok, String.t()} | {:error, String.t()} | {:error, :unavailable}
 
   def start_link(_opts \\ []) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
@@ -45,6 +50,16 @@ defmodule NexPinger.IcmpHelper do
 
   @spec ping(String.t(), non_neg_integer()) :: result()
   def ping(address, timeout_ms) do
+    request(:ping, "#{address} #{timeout_ms}", address, timeout_ms + 5_000)
+  end
+
+  @doc """
+  Looks up the MAC address of an IP in the neighbor table.
+  """
+  @spec mac(String.t()) :: mac_result()
+  def mac(address), do: request(:mac, address, address, @mac_timeout)
+
+  defp request(command, args, address, call_timeout) do
     cond do
       match?({:error, _}, executable()) ->
         {:error, :unavailable}
@@ -53,7 +68,7 @@ defmodule NexPinger.IcmpHelper do
         {:error, "invalid address"}
 
       true ->
-        GenServer.call(__MODULE__, {:ping, address, timeout_ms}, timeout_ms + 5_000)
+        GenServer.call(__MODULE__, {:request, command, args}, call_timeout)
     end
   catch
     :exit, _reason -> {:error, "icmp helper not responding"}
@@ -82,17 +97,18 @@ defmodule NexPinger.IcmpHelper do
   def handle_call(:broken_reason, _from, %{broken: nil} = state), do: {:reply, :ok, state}
   def handle_call(:broken_reason, _from, state), do: {:reply, {:error, state.broken}, state}
 
-  def handle_call({:ping, _address, _timeout_ms}, _from, %{broken: broken} = state)
+  def handle_call({:request, _command, _args}, _from, %{broken: broken} = state)
       when broken != nil do
     {:reply, {:error, :unavailable}, state}
   end
 
-  def handle_call({:ping, address, timeout_ms}, from, state) do
+  def handle_call({:request, command, args}, from, state) do
     case ensure_port(state) do
       {:ok, state} ->
         id = state.next_id
-        Port.command(state.port, "#{id} #{address} #{timeout_ms}\n")
-        {:noreply, %{state | next_id: id + 1, pending: Map.put(state.pending, id, from)}}
+        Port.command(state.port, "#{id} #{command} #{args}\n")
+        pending = Map.put(state.pending, id, {from, command})
+        {:noreply, %{state | next_id: id + 1, pending: pending}}
 
       {:error, reason} ->
         {:reply, {:error, :unavailable}, %{state | broken: reason}}
@@ -105,8 +121,8 @@ defmodule NexPinger.IcmpHelper do
 
     with [id, status, detail] <- String.split(line, " ", parts: 3),
          {id, ""} <- Integer.parse(id),
-         {from, pending} when not is_nil(from) <- Map.pop(state.pending, id) do
-      GenServer.reply(from, parse_result(status, detail))
+         {{from, command}, pending} <- Map.pop(state.pending, id) do
+      GenServer.reply(from, parse_result(command, status, detail))
       {:noreply, %{state | pending: pending}}
     else
       _ -> {:noreply, state}
@@ -116,14 +132,16 @@ defmodule NexPinger.IcmpHelper do
   # Exited without replying: can't run here (wrong format, blocked by security software, etc.).
   # Fall back to the ping command from now on.
   def handle_info({port, {:exit_status, status}}, %{port: port, responded?: false} = state) do
-    Enum.each(state.pending, fn {_id, from} -> GenServer.reply(from, {:error, :unavailable}) end)
+    Enum.each(state.pending, fn {_id, {from, _command}} ->
+      GenServer.reply(from, {:error, :unavailable})
+    end)
 
     {:noreply,
      %{state | port: nil, pending: %{}, broken: "#{@executable} exited with status #{status}"}}
   end
 
   def handle_info({port, {:exit_status, status}}, %{port: port} = state) do
-    Enum.each(state.pending, fn {_id, from} ->
+    Enum.each(state.pending, fn {_id, {from, _command}} ->
       GenServer.reply(from, {:error, "icmp helper exited (status #{status})"})
     end)
 
@@ -145,13 +163,14 @@ defmodule NexPinger.IcmpHelper do
 
   defp ensure_port(state), do: {:ok, state}
 
-  defp parse_result("ok", rtt) do
+  defp parse_result(:ping, "ok", rtt) do
     case Float.parse(rtt) do
       {rtt_ms, _rest} -> {:ok, rtt_ms}
       :error -> {:error, "invalid icmp helper response"}
     end
   end
 
-  defp parse_result("error", reason), do: {:error, reason}
-  defp parse_result(_status, _detail), do: {:error, "invalid icmp helper response"}
+  defp parse_result(:mac, "ok", mac), do: {:ok, mac}
+  defp parse_result(_command, "error", reason), do: {:error, reason}
+  defp parse_result(_command, _status, _detail), do: {:error, "invalid icmp helper response"}
 end
