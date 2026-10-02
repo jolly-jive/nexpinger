@@ -12,8 +12,9 @@ permissions:
 jobs:
   escript:
     runs-on: ubuntu-latest
+    # Not prod: Burrito (prod only) would be embedded in the escript
     env:
-      MIX_ENV: prod
+      MIX_ENV: escript
     steps:
       - uses: actions/checkout@v7
 

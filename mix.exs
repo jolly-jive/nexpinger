@@ -78,7 +78,9 @@ defmodule NexPinger.MixProject do
   defp deps do
     [
       {:yaml_elixir, "~> 2.9"},
-      {:burrito, "~> 1.0", runtime: false}
+      # prod only: escript.build embeds every dep of the env, runtime: false or not.
+      # Build the escript in another env to keep Burrito and its deps out.
+      {:burrito, "~> 1.0", runtime: false, only: :prod}
     ]
   end
 
