@@ -32,6 +32,26 @@ defmodule NexPinger.ConsoleSubscriberTest do
     assert output =~ "1.23 ms"
   end
 
+  test "fits the address to the width set from the hosts" do
+    host = %Host{
+      name: "web",
+      address: "www.example.com",
+      resolved: "203.0.113.10",
+      items: []
+    }
+
+    item = %Item{name: "ping", type: :icmp}
+    {:ok, state} = ConsoleSubscriber.init([])
+    {:reply, :ok, state} = ConsoleSubscriber.handle_call({:configure, [host], 1000, 80, 24}, self(), state)
+
+    output =
+      capture_io(fn ->
+        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
+      end)
+
+    assert output =~ "(www.examp..=203.0.113.10) "
+  end
+
   test "hides the cursor while the statistics view is shown" do
     {:ok, state} = ConsoleSubscriber.init([])
 

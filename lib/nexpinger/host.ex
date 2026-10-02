@@ -1,6 +1,7 @@
 defmodule NexPinger.Host do
   @moduledoc """
   A monitored host and its items.
+  `resolved` and `mac_address` are set per probe.
   """
 
   alias NexPinger.{Item, Resolver}
@@ -10,6 +11,7 @@ defmodule NexPinger.Host do
             address: nil,
             family: :auto,
             items: [],
+            resolved: nil,
             mac_address: nil
 
   @type t :: %__MODULE__{
@@ -17,6 +19,7 @@ defmodule NexPinger.Host do
           address: String.t(),
           family: Resolver.family(),
           items: [Item.t()],
+          resolved: String.t() | nil,
           mac_address: String.t() | nil
         }
 end

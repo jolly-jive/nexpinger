@@ -6,7 +6,13 @@ defmodule NexPinger.FileSubscriberTest do
   @timestamp "2026-09-30 12:00:00.123"
 
   defp tcp_host,
-    do: %Host{name: "web", address: "192.0.2.10", mac_address: "00:00:5e:00:53:01", items: []}
+    do: %Host{
+      name: "web",
+      address: "192.0.2.10",
+      resolved: "192.0.2.10",
+      mac_address: "00:00:5e:00:53:01",
+      items: []
+    }
 
   defp tcp_item, do: %Item{name: "https", type: :tcp, port: 443}
   defp icmp_host, do: %Host{name: "gateway", address: "192.0.2.1", items: []}
@@ -27,17 +33,29 @@ defmodule NexPinger.FileSubscriberTest do
       assert record(:text, icmp_host(), icmp_item(), {:error, "timeout"}) =~
                ~r/ICMP NG  timeout\n$/
     end
+
+    test "never cuts a name or its resolved IP" do
+      host = %Host{
+        name: "web",
+        address: "www.example.com",
+        resolved: "2001:db8:1:2:a1b2:c3ff:fed4:e5f6",
+        items: []
+      }
+
+      assert record(:text, host, icmp_item(), {:ok, 1.0}) =~
+               "(www.example.com=2001:db8:1:2:a1b2:c3ff:fed4:e5f6) "
+    end
   end
 
   describe "tsv format" do
     test "writes raw values separated by tabs" do
       assert record(:tsv, tcp_host(), tcp_item(), {:ok, 45.671}) ==
-               "2026-09-30 12:00:00.123\tweb\t192.0.2.10\t00:00:5e:00:53:01\thttps\ttcp\t443\tok\t45.671\t\n"
+               "2026-09-30 12:00:00.123\tweb\t192.0.2.10\t192.0.2.10\t00:00:5e:00:53:01\thttps\ttcp\t443\tok\t45.671\t\n"
     end
 
     test "leaves missing values empty" do
       assert record(:tsv, icmp_host(), icmp_item(), {:error, "timeout"}) ==
-               "2026-09-30 12:00:00.123\tgateway\t192.0.2.1\t\tping\ticmp\t\tng\t\ttimeout\n"
+               "2026-09-30 12:00:00.123\tgateway\t192.0.2.1\t\t\tping\ticmp\t\tng\t\ttimeout\n"
     end
 
     test "replaces tabs and newlines inside values with spaces" do
@@ -45,7 +63,7 @@ defmodule NexPinger.FileSubscriberTest do
 
       line = record(:tsv, host, icmp_item(), {:error, "line1\r\nline2"})
 
-      assert line |> String.trim_trailing("\n") |> String.split("\t") |> length() == 10
+      assert line |> String.trim_trailing("\n") |> String.split("\t") |> length() == 11
       assert line =~ "\ta b\t"
       assert line =~ "\tline1  line2\n"
     end
@@ -63,6 +81,7 @@ defmodule NexPinger.FileSubscriberTest do
                "timestamp" => @timestamp,
                "host" => "web",
                "address" => "192.0.2.10",
+               "resolved" => "192.0.2.10",
                "mac" => "00:00:5e:00:53:01",
                "item" => "https",
                "type" => "tcp",
@@ -94,7 +113,7 @@ defmodule NexPinger.FileSubscriberTest do
       [header | rows] = path |> File.read!() |> String.split("\n", trim: true)
 
       assert header ==
-               "timestamp\thost\taddress\tmac\titem\ttype\tport\tstatus\trtt_ms\terror"
+               "timestamp\thost\taddress\tresolved\tmac\titem\ttype\tport\tstatus\trtt_ms\terror"
 
       assert [row] = rows
       assert row =~ ~r/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\tgateway\t/

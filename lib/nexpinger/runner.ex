@@ -43,7 +43,8 @@ defmodule NexPinger.Runner do
     case Resolver.resolve(host.address, host.family) do
       {:ok, ip} ->
         result = Prober.probe(ip, item)
-        {%{host | mac_address: MacResolver.lookup(Resolver.to_string(ip))}, result}
+        resolved = Resolver.to_string(ip)
+        {%{host | resolved: resolved, mac_address: MacResolver.lookup(resolved)}, result}
 
       {:error, reason} ->
         {host, {:error, reason}}

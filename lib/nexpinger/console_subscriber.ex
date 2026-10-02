@@ -5,7 +5,7 @@ defmodule NexPinger.ConsoleSubscriber do
 
   use GenServer
 
-  alias NexPinger.{Host, Item, Statistics, StatisticsView, Timestamp}
+  alias NexPinger.{AddressLabel, Host, Item, Statistics, StatisticsView, Timestamp}
 
   @default_stats_window 1000
   @default_stats_width 80
@@ -36,6 +36,7 @@ defmodule NexPinger.ConsoleSubscriber do
        statistics: Statistics.new([], @default_stats_window),
        stats_width: @default_stats_width,
        stats_height: @default_stats_height,
+       address_width: AddressLabel.min_width(),
        mode: :results,
        offset: 0,
        stats_dirty: false,
@@ -52,7 +53,8 @@ defmodule NexPinger.ConsoleSubscriber do
        state
        | statistics: statistics,
          stats_width: stats_width,
-         stats_height: stats_height
+         stats_height: stats_height,
+         address_width: AddressLabel.width(hosts)
      }}
   end
 
@@ -94,7 +96,7 @@ defmodule NexPinger.ConsoleSubscriber do
       if state.mode == :stats do
         schedule_stats_render(state)
       else
-        print_result(host, item, {:ok, rtt_ms})
+        print_result(host, item, {:ok, rtt_ms}, state.address_width)
         state
       end
 
@@ -110,7 +112,7 @@ defmodule NexPinger.ConsoleSubscriber do
       if state.mode == :stats do
         schedule_stats_render(state)
       else
-        print_result(host, item, {:error, reason})
+        print_result(host, item, {:error, reason}, state.address_width)
         state
       end
 
@@ -138,11 +140,11 @@ defmodule NexPinger.ConsoleSubscriber do
   end
 
   # Some terminals (Windows) don't map "\n" to "\r\n" in raw mode, so write "\r\n".
-  defp print_result(host, item, {:ok, rtt_ms}) do
+  defp print_result(host, item, {:ok, rtt_ms}, address_width) do
     IO.write([
       timestamp(),
       " | ",
-      format_label(host, item),
+      format_label(host, item, address_width),
       status_tag(:ok),
       " ",
       :io_lib.format("~7.2f ms", [rtt_ms]),
@@ -150,11 +152,11 @@ defmodule NexPinger.ConsoleSubscriber do
     ])
   end
 
-  defp print_result(host, item, {:error, reason}) do
+  defp print_result(host, item, {:error, reason}, address_width) do
     IO.write([
       timestamp(),
       " | ",
-      format_label(host, item),
+      format_label(host, item, address_width),
       status_tag(:ng),
       " ",
       reason,
@@ -174,18 +176,18 @@ defmodule NexPinger.ConsoleSubscriber do
     %{state | stats_dirty: false}
   end
 
-  defp format_label(%Host{name: name, address: address} = host, %Item{
-         name: item_name,
-         type: type,
-         port: port
-       }) do
+  defp format_label(
+         %Host{name: name} = host,
+         %Item{name: item_name, type: type, port: port},
+         address_width
+       ) do
     type_str = type |> Atom.to_string() |> String.upcase() |> String.pad_trailing(4)
     item_label = if port, do: "#{item_name}:#{port}", else: item_name
 
     [
       String.pad_trailing("#{name}/#{item_label}", 24),
       "(",
-      String.pad_trailing(address, 15),
+      AddressLabel.fit(host, address_width),
       ") ",
       mac_label(host),
       type_str,

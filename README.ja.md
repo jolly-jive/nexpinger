@@ -191,13 +191,13 @@ UDP 監視では、サービスが応答する要求を送り、**応答の有�
 ## 出力例
 
 ```
-2026-09-16 12:00:00.123 | gateway/ping             (192.168.1.1    ) 00:00:5e:00:53:01 ICMP OK    1.23 ms
-2026-09-16 12:00:01.456 | web-server/https:443      (example.com    )                   TCP  OK   45.67 ms
-2026-09-16 12:00:02.789 | dns-server/ping           (192.168.1.10   )                   ICMP NG    timeout
-2026-09-16 12:00:03.012 | dns-server/dns:53         (192.168.1.10   )                   UDP  OK    2.34 ms
+2026-09-16 12:00:00.123 | gateway/ping            (192.168.1.1             ) 00:00:5e:00:53:01 ICMP OK    1.23 ms
+2026-09-16 12:00:01.456 | web-server/https:443    (example.com=203.0.113.10)                   TCP  OK   45.67 ms
+2026-09-16 12:00:02.789 | dns-server/ping         (192.168.1.10            )                   ICMP NG    timeout
+2026-09-16 12:00:03.012 | dns-server/dns:53       (192.168.1.10            )                   UDP  OK    2.34 ms
 ```
 
-時刻は画面・ファイルとも実行環境のローカル時刻です。同一 IP サブネット上で MAC アドレスを取得できた場合だけ表示し、取得できない場合も同じ幅の空白を確保します。`--log-format text`（既定）ではログファイルへも同じ形式で追記されます。`--no-stdout` を付けると、コンソール側には出力されず、ファイルのみに残ります。
+時刻は画面・ファイルとも実行環境のローカル時刻です。同一 IP サブネット上で MAC アドレスを取得できた場合だけ表示し、取得できない場合も同じ幅の空白を確保します。`address` がホスト名の場合は、解決した IP アドレスを `名前=IP` の形で併記します。アドレス欄の幅は起動時に設定から決まり（15〜24桁）、収まらない場合は名前を右から切り詰め、それでも収まらなければ名前を省き、IP アドレスは左から切り詰めます（IPv6 のインターフェース ID を優先して表示）。`--log-format text`（既定）ではログファイルへも同じ形式で追記されます。ただしファイルではアドレスを切り詰めません。`--no-stdout` を付けると、コンソール側には出力されず、ファイルのみに残ります。
 
 ### ログファイル形式
 
@@ -208,6 +208,7 @@ UDP 監視では、サービスが応答する要求を送り、**応答の有�
 | `timestamp` | 計測時刻（ローカル時刻、`2026-09-30 12:00:00.123` 形式） |
 | `host` | ホスト名 |
 | `address` | アドレス |
+| `resolved` | 監視に使った IP アドレス（名前解決に失敗した場合は欠損） |
 | `mac` | MAC アドレス（取得できない場合は欠損） |
 | `item` | Item 名 |
 | `type` | `icmp` / `tcp` / `udp` |
@@ -222,13 +223,13 @@ UDP 監視では、サービスが応答する要求を送り、**応答の有�
 既存ファイルへは形式を確認せずに追記するため、異なる形式を同じファイルへ混在させないでください。
 
 ```text
-timestamp	host	address	mac	item	type	port	status	rtt_ms	error
-2026-09-16 12:00:00.123	gateway	192.168.1.1	00:00:5e:00:53:01	ping	icmp		ok	1.23	
-2026-09-16 12:00:02.789	dns-server	192.168.1.10		ping	icmp		ng		timeout
+timestamp	host	address	resolved	mac	item	type	port	status	rtt_ms	error
+2026-09-16 12:00:00.123	gateway	192.168.1.1	192.168.1.1	00:00:5e:00:53:01	ping	icmp		ok	1.23	
+2026-09-16 12:00:02.789	dns-server	192.168.1.10	192.168.1.10		ping	icmp		ng		timeout
 ```
 
 ```json
-{"timestamp":"2026-09-16 12:00:01.456","host":"web-server","address":"example.com","mac":null,"item":"https","type":"tcp","port":443,"status":"ok","rtt_ms":45.67,"error":null}
+{"timestamp":"2026-09-16 12:00:01.456","host":"web-server","address":"example.com","resolved":"203.0.113.10","mac":null,"item":"https","type":"tcp","port":443,"status":"ok","rtt_ms":45.67,"error":null}
 ```
 
 グラフ表示などの可視化機能は内蔵していません。TSV / JSON Lines のログを外部ツール（Excel、Livebook など）に読み込んで行う想定です。

@@ -191,13 +191,13 @@ A UDP check sends a request that makes the service reply, and **only checks whet
 ## Sample output
 
 ```
-2026-09-16 12:00:00.123 | gateway/ping             (192.168.1.1    ) 00:00:5e:00:53:01 ICMP OK    1.23 ms
-2026-09-16 12:00:01.456 | web-server/https:443      (example.com    )                   TCP  OK   45.67 ms
-2026-09-16 12:00:02.789 | dns-server/ping           (192.168.1.10   )                   ICMP NG    timeout
-2026-09-16 12:00:03.012 | dns-server/dns:53         (192.168.1.10   )                   UDP  OK    2.34 ms
+2026-09-16 12:00:00.123 | gateway/ping            (192.168.1.1             ) 00:00:5e:00:53:01 ICMP OK    1.23 ms
+2026-09-16 12:00:01.456 | web-server/https:443    (example.com=203.0.113.10)                   TCP  OK   45.67 ms
+2026-09-16 12:00:02.789 | dns-server/ping         (192.168.1.10            )                   ICMP NG    timeout
+2026-09-16 12:00:03.012 | dns-server/dns:53       (192.168.1.10            )                   UDP  OK    2.34 ms
 ```
 
-Times are local time, on screen and in files. The MAC address is shown only when found on the same IP subnet; otherwise the same width is left blank. With `--log-format text` (default), the log file gets the same format. With `--no-stdout`, nothing goes to the console; results go only to the file.
+Times are local time, on screen and in files. The MAC address is shown only when found on the same IP subnet; otherwise the same width is left blank. When `address` is a host name, the resolved IP is shown with it as `name=IP`. The address column width is set at startup from the config (15 to 24 columns). Text that does not fit is cut: first the name from the right, then the name is dropped, and the IP is cut from the left (keeping the IPv6 interface ID). With `--log-format text` (default), the log file gets the same format, but the address is never cut there. With `--no-stdout`, nothing goes to the console; results go only to the file.
 
 ### Log file formats
 
@@ -208,6 +208,7 @@ Times are local time, on screen and in files. The MAC address is shown only when
 | `timestamp` | Time of the check (local time, `2026-09-30 12:00:00.123`) |
 | `host` | Host name |
 | `address` | Address |
+| `resolved` | IP address used for the check (missing if resolution failed) |
 | `mac` | MAC address (missing if not found) |
 | `item` | Item name |
 | `type` | `icmp` / `tcp` / `udp` |
@@ -222,13 +223,13 @@ Times are local time, on screen and in files. The MAC address is shown only when
 Existing files are appended to without checking their format, so don't mix formats in one file.
 
 ```text
-timestamp	host	address	mac	item	type	port	status	rtt_ms	error
-2026-09-16 12:00:00.123	gateway	192.168.1.1	00:00:5e:00:53:01	ping	icmp		ok	1.23	
-2026-09-16 12:00:02.789	dns-server	192.168.1.10		ping	icmp		ng		timeout
+timestamp	host	address	resolved	mac	item	type	port	status	rtt_ms	error
+2026-09-16 12:00:00.123	gateway	192.168.1.1	192.168.1.1	00:00:5e:00:53:01	ping	icmp		ok	1.23	
+2026-09-16 12:00:02.789	dns-server	192.168.1.10	192.168.1.10		ping	icmp		ng		timeout
 ```
 
 ```json
-{"timestamp":"2026-09-16 12:00:01.456","host":"web-server","address":"example.com","mac":null,"item":"https","type":"tcp","port":443,"status":"ok","rtt_ms":45.67,"error":null}
+{"timestamp":"2026-09-16 12:00:01.456","host":"web-server","address":"example.com","resolved":"203.0.113.10","mac":null,"item":"https","type":"tcp","port":443,"status":"ok","rtt_ms":45.67,"error":null}
 ```
 
 There is no built-in graphing. For charts, feed TSV / JSON Lines logs to an external tool (Excel, Livebook, etc.).

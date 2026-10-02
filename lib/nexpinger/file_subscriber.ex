@@ -2,19 +2,19 @@ defmodule NexPinger.FileSubscriber do
   @moduledoc """
   Subscriber that writes results from the Broadcaster to a file.
 
-  Formats: `:text` (same fixed-width text as the screen), `:tsv` (tab-separated raw data),
+  Formats: `:text` (the screen's layout, but the address is never cut), `:tsv` (tab-separated raw data),
   `:jsonl` (one JSON record per line).
   """
 
   use GenServer
 
-  alias NexPinger.{Host, Item, Timestamp}
+  alias NexPinger.{AddressLabel, Host, Item, Timestamp}
 
   @type format :: :text | :tsv | :jsonl
 
   @formats [:text, :tsv, :jsonl]
 
-  @fields ~w(timestamp host address mac item type port status rtt_ms error)
+  @fields ~w(timestamp host address resolved mac item type port status rtt_ms error)
 
   @spec formats() :: [format()]
   def formats, do: @formats
@@ -116,6 +116,7 @@ defmodule NexPinger.FileSubscriber do
       timestamp,
       host.name,
       host.address,
+      host.resolved,
       host.mac_address,
       item.name,
       Atom.to_string(item.type),
@@ -141,18 +142,15 @@ defmodule NexPinger.FileSubscriber do
   defp notify_owner(nil, _message), do: :ok
   defp notify_owner(owner, message), do: send(owner, message)
 
-  defp format_label(%Host{name: name, address: address} = host, %Item{
-         name: item_name,
-         type: type,
-         port: port
-       }) do
+  # The address is never cut in files
+  defp format_label(%Host{name: name} = host, %Item{name: item_name, type: type, port: port}) do
     type_str = type |> Atom.to_string() |> String.upcase() |> String.pad_trailing(4)
     item_label = if port, do: "#{item_name}:#{port}", else: item_name
 
     [
       String.pad_trailing("#{name}/#{item_label}", 24),
       "(",
-      String.pad_trailing(address, 15),
+      String.pad_trailing(AddressLabel.full(host), AddressLabel.min_width()),
       ") ",
       mac_label(host),
       type_str,
