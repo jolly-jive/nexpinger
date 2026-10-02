@@ -92,10 +92,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+
+      # The binaries include third-party code; ship its notices with them
+      - run: cp LICENSE NOTICE THIRD_PARTY_NOTICES dist/
 
       - uses: softprops/action-gh-release@v3
         with:

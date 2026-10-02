@@ -243,3 +243,5 @@ There is no built-in graphing. For charts, feed TSV / JSON Lines logs to an exte
 Copyright 2026 Cayenne Ryo
 
 Licensed under the [Apache License 2.0](LICENSE). See also [NOTICE](NOTICE).
+
+The release binaries include third-party software (Elixir, Erlang/OTP, yaml_elixir, yamerl, Burrito, etc.). Their licenses are in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES), which is also attached to each GitHub Release.

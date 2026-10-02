@@ -243,3 +243,5 @@ timestamp	host	address	resolved	mac	item	type	port	status	rtt_ms	error
 Copyright 2026 Cayenne Ryo
 
 [Apache License 2.0](LICENSE) で公開しています。[NOTICE](NOTICE) も参照してください。
+
+配布バイナリには第三者のソフトウェア（Elixir、Erlang/OTP、yaml_elixir、yamerl、Burrito など）が含まれます。それらのライセンスは [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) にまとめており、各 GitHub Release にも添付しています。
