@@ -34,15 +34,27 @@ defmodule NexPinger.UdpProbeTest do
         :gen_udp.send(server, ip, client_port, "garbage")
       end)
 
-      assert {:ok, rtt} = UdpProbe.probe("127.0.0.1", :dns, port, 1000)
+      assert {:ok, rtt} = UdpProbe.probe({127, 0, 0, 1}, :dns, port, 1000)
       assert is_float(rtt)
+    end
+
+    test "works over IPv6" do
+      {:ok, server} = :gen_udp.open(0, [:binary, :inet6, active: false, ip: {0, 0, 0, 0, 0, 0, 0, 1}])
+      {:ok, port} = :inet.port(server)
+
+      Task.start(fn ->
+        {:ok, {ip, client_port, _packet}} = :gen_udp.recv(server, 0, 2000)
+        :gen_udp.send(server, ip, client_port, "garbage")
+      end)
+
+      assert {:ok, _rtt} = UdpProbe.probe({0, 0, 0, 0, 0, 0, 0, 1}, :dns, port, 1000)
     end
 
     test "no reply is a timeout" do
       {:ok, server} = :gen_udp.open(0, [:binary, active: false, ip: {127, 0, 0, 1}])
       {:ok, port} = :inet.port(server)
 
-      assert UdpProbe.probe("127.0.0.1", :ntp, port, 100) == {:error, "timeout"}
+      assert UdpProbe.probe({127, 0, 0, 1}, :ntp, port, 100) == {:error, "timeout"}
     end
 
     test "a closed port is port unreachable" do
@@ -50,11 +62,7 @@ defmodule NexPinger.UdpProbeTest do
       {:ok, port} = :inet.port(server)
       :gen_udp.close(server)
 
-      assert UdpProbe.probe("127.0.0.1", :dns, port, 1000) == {:error, "port unreachable"}
-    end
-
-    test "an unknown host" do
-      assert UdpProbe.probe("no-such-host.invalid", :dns, 53, 100) == {:error, "unknown host"}
+      assert UdpProbe.probe({127, 0, 0, 1}, :dns, port, 1000) == {:error, "port unreachable"}
     end
   end
 end

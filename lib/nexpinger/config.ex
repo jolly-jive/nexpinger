@@ -3,7 +3,7 @@ defmodule NexPinger.Config do
   Loads a YAML or hosts-format config file into a list of NexPinger.Host.
   """
 
-  alias NexPinger.{Host, Item, UdpProbe}
+  alias NexPinger.{Host, Item, Resolver, UdpProbe}
 
   @spec load(String.t()) :: {:ok, [Host.t()]} | {:error, term()}
   def load(path) do
@@ -93,11 +93,24 @@ defmodule NexPinger.Config do
       |> Map.fetch!("items")
       |> Enum.map(&to_item!/1)
 
-    %Host{
-      name: Map.fetch!(map, "name"),
-      address: Map.fetch!(map, "address"),
-      items: items
-    }
+    name = Map.fetch!(map, "name")
+    address = Map.fetch!(map, "address")
+    family = family!(map)
+
+    if family != :auto and Resolver.literal_family(address) not in [nil, family] do
+      raise "Host #{inspect(name)}: #{address} is not an #{Resolver.family_name(family)} address"
+    end
+
+    %Host{name: name, address: address, family: family, items: items}
+  end
+
+  defp family!(map) do
+    case Map.get(map, "family", "auto") do
+      "ipv4" -> :ipv4
+      "ipv6" -> :ipv6
+      "auto" -> :auto
+      other -> raise "Unknown family: #{inspect(other)} (host: #{inspect(map["name"])})"
+    end
   end
 
   defp to_item!(map) do

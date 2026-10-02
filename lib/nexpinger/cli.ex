@@ -9,6 +9,7 @@ defmodule NexPinger.CLI do
     ConsoleSubscriber,
     FileSubscriber,
     Prober,
+    Resolver,
     Runner,
     TerminalInput,
     UdpProbe
@@ -116,6 +117,15 @@ defmodule NexPinger.CLI do
         System.halt(1)
 
       {:ok, hosts} ->
+        case resolve_errors(hosts) do
+          [] ->
+            :ok
+
+          errors ->
+            Enum.each(errors, &IO.puts(:stderr, &1))
+            System.halt(1)
+        end
+
         item_count = Enum.sum(Enum.map(hosts, &length(&1.items)))
         stats_width = requested_stats_width || TerminalInput.terminal_width()
         stats_height = TerminalInput.terminal_height()
@@ -174,6 +184,18 @@ defmodule NexPinger.CLI do
       {:error, reason} ->
         IO.puts(:stderr, "Failed to load config: #{inspect(reason)}")
         System.halt(1)
+    end
+  end
+
+  @doc """
+  Resolves every host once at startup. Returns a message per host that fails.
+  Later failures only make that probe NG.
+  """
+  @spec resolve_errors([NexPinger.Host.t()]) :: [String.t()]
+  def resolve_errors(hosts) do
+    for host <- hosts,
+        {:error, reason} <- [Resolver.resolve(host.address, host.family)] do
+      "Cannot resolve #{host.name}: #{host.address} (family: #{host.family}): #{reason}"
     end
   end
 

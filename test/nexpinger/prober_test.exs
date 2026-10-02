@@ -1,7 +1,20 @@
 defmodule NexPinger.ProberTest do
   use ExUnit.Case, async: true
 
-  alias NexPinger.Prober
+  alias NexPinger.{Item, Prober}
+
+  describe "probe/2 with TCP" do
+    test "connects over IPv4 and IPv6" do
+      for {family, ip} <- [inet: {127, 0, 0, 1}, inet6: {0, 0, 0, 0, 0, 0, 0, 1}] do
+        {:ok, listen} = :gen_tcp.listen(0, [family, ip: ip])
+        {:ok, port} = :inet.port(listen)
+        item = %Item{name: "tcp", type: :tcp, port: port}
+
+        assert {:ok, _rtt} = Prober.probe(ip, item), inspect(ip)
+        :gen_tcp.close(listen)
+      end
+    end
+  end
 
   describe "parse_ping_time/2 on Windows" do
     @windows {:win32, :nt}

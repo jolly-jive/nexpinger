@@ -88,6 +88,16 @@ defmodule NexPinger.CLITest do
     assert warning =~ "server/fast"
   end
 
+  test "reports hosts that cannot be resolved at startup" do
+    hosts = [
+      %NexPinger.Host{name: "ok", address: "127.0.0.1", items: []},
+      %NexPinger.Host{name: "ng", address: "no-such-host.invalid", family: :ipv4, items: []}
+    ]
+
+    assert [message] = NexPinger.CLI.resolve_errors(hosts)
+    assert message =~ "ng: no-such-host.invalid (family: ipv4): unknown host"
+  end
+
   test "returns invalid options" do
     assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
              NexPinger.CLI.parse_options(["--unknown", "config/hosts.yml"])

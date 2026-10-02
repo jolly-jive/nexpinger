@@ -10,6 +10,8 @@ defmodule NexPinger.IcmpSocket do
 
   import Bitwise
 
+  alias NexPinger.Resolver
+
   @echo_request_v4 8
   @echo_reply_v4 0
   @echo_request_v6 128
@@ -18,39 +20,16 @@ defmodule NexPinger.IcmpSocket do
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, String.t()} | {:error, :unavailable}
 
-  @spec ping(String.t(), non_neg_integer()) :: result()
-  def ping(address, timeout_ms) do
-    with {:ok, family, ip} <- resolve(address),
-         {:ok, socket} <- open(family) do
+  @spec ping(:inet.ip_address(), non_neg_integer()) :: result()
+  def ping(ip, timeout_ms) do
+    family = Resolver.socket_family(ip)
+
+    with {:ok, socket} <- open(family) do
       try do
         echo(socket, family, ip, timeout_ms)
       after
         :socket.close(socket)
       end
-    end
-  end
-
-  defp resolve(address) do
-    charlist = to_charlist(address)
-
-    case :inet.parse_address(charlist) do
-      {:ok, ip} when tuple_size(ip) == 4 ->
-        {:ok, :inet, ip}
-
-      {:ok, ip} ->
-        {:ok, :inet6, ip}
-
-      {:error, _} ->
-        case :inet.getaddr(charlist, :inet) do
-          {:ok, ip} ->
-            {:ok, :inet, ip}
-
-          {:error, _} ->
-            case :inet.getaddr(charlist, :inet6) do
-              {:ok, ip} -> {:ok, :inet6, ip}
-              {:error, _} -> {:error, "unknown host"}
-            end
-        end
     end
   end
 

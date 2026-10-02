@@ -6,7 +6,7 @@ defmodule NexPinger.Runner do
 
   use GenServer
 
-  alias NexPinger.{Broadcaster, Host, Item, MacResolver, Prober}
+  alias NexPinger.{Broadcaster, Host, Item, MacResolver, Prober, Resolver}
 
   @type state :: %{
           host: Host.t(),
@@ -32,11 +32,22 @@ defmodule NexPinger.Runner do
 
   @impl true
   def handle_info(:probe, %{host: host, item: item} = state) do
-    result = Prober.probe(host, item)
-    host_with_mac = %{host | mac_address: MacResolver.lookup(host.address)}
-    Broadcaster.publish(host_with_mac, item, result)
+    {host, result} = resolve_and_probe(host, item)
+    Broadcaster.publish(host, item, result)
     schedule_next(state.interval)
     {:noreply, state}
+  end
+
+  # Resolved on every probe, to follow DNS changes
+  defp resolve_and_probe(host, item) do
+    case Resolver.resolve(host.address, host.family) do
+      {:ok, ip} ->
+        result = Prober.probe(ip, item)
+        {%{host | mac_address: MacResolver.lookup(Resolver.to_string(ip))}, result}
+
+      {:error, reason} ->
+        {host, {:error, reason}}
+    end
   end
 
   defp schedule_next(interval) do

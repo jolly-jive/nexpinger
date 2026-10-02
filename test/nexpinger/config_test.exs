@@ -135,6 +135,71 @@ defmodule NexPinger.ConfigTest do
     end
   end
 
+  test "loads the host family, default auto" do
+    path =
+      write_config!("""
+      hosts:
+        - name: default
+          address: example.com
+          items: [{name: ping}]
+        - name: v4
+          address: example.com
+          family: ipv4
+          items: [{name: ping}]
+        - name: v6
+          address: 2001:db8::1
+          family: ipv6
+          items: [{name: ping}]
+        - name: auto
+          address: 192.0.2.1
+          family: auto
+          items: [{name: ping}]
+      """)
+
+    assert {:ok, hosts} = Config.load(path)
+    assert Enum.map(hosts, & &1.family) == [:auto, :ipv4, :ipv6, :auto]
+  end
+
+  test "hosts format uses family auto" do
+    path = write_config!("::1 ip6-localhost\n")
+
+    assert {:ok, [host]} = Config.load(path)
+    assert host.family == :auto
+  end
+
+  test "rejects an unknown family" do
+    path =
+      write_config!("""
+      hosts:
+        - name: server
+          address: example.com
+          family: inet6
+          items: [{name: ping}]
+      """)
+
+    assert {:error, message} = Config.load(path)
+    assert message =~ "Unknown family"
+  end
+
+  test "rejects an IP literal of the other family" do
+    for {address, family, expected} <- [
+          {"192.0.2.1", "ipv6", "not an IPv6 address"},
+          {"2001:db8::1", "ipv4", "not an IPv4 address"}
+        ] do
+      path =
+        write_config!("""
+        hosts:
+          - name: server
+            address: "#{address}"
+            family: #{family}
+            items: [{name: ping}]
+        """)
+
+      assert {:error, message} = Config.load(path)
+      assert message =~ expected
+    end
+  end
+
   defp write_config!(content) do
     path = Path.join(System.tmp_dir!(), "nexpinger-config-#{System.unique_integer([:positive])}.yml")
     File.write!(path, content)

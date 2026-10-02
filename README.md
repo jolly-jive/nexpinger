@@ -159,6 +159,8 @@ hosts:
 ```
 
 - A host has `name` and `address`, and one or more checks in `items`
+- A host's `family` (`ipv4`, `ipv6` or `auto`, default `auto`) sets the address family. For a host name in `address`, `ipv4` looks up the A record and `ipv6` the AAAA record. `auto` looks up the A record, else the AAAA record (if there is an A record, IPv6 is not tried even when IPv4 is unreachable). An IP address in `address` that does not match `family` is a config error
+- Names are resolved on every check, so DNS changes are followed. A host that cannot be resolved at startup is an error and NexPinger exits. If resolution fails later, that check is NG (`unknown host`) and monitoring goes on
 - An Item has `name`, `type` (`icmp`, `tcp` or `udp`), `interval` (ms), and `timeout` (ms, default 1000)
 - `port` is required for `type: tcp`
 - `service` (`dns`, `ntp` or `quic`) is required for `type: udp`. `port` defaults to the service's standard port (dns: 53, ntp: 123, quic: 443)

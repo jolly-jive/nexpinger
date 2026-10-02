@@ -1,6 +1,6 @@
 defmodule NexPinger.Prober do
   @moduledoc """
-  Runs one reachability check.
+  Runs one reachability check against a resolved IP (`NexPinger.Resolver`).
   ICMP is sent without privileges:
     * Linux: ICMP datagram socket (`NexPinger.IcmpSocket`), else the ping command
     * Windows: IcmpSendEcho2 helper (`NexPinger.IcmpHelper`), else the ping command
@@ -9,16 +9,16 @@ defmodule NexPinger.Prober do
   UDP: sends a service request and waits for any reply (`NexPinger.UdpProbe`).
   """
 
-  alias NexPinger.{Host, IcmpHelper, IcmpSocket, Item, UdpProbe}
+  alias NexPinger.{IcmpHelper, IcmpSocket, Item, Resolver, UdpProbe}
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, reason :: String.t()}
 
-  @spec probe(Host.t(), Item.t()) :: result()
-  def probe(%Host{} = host, %Item{type: :icmp} = item), do: icmp_probe(host, item)
-  def probe(%Host{} = host, %Item{type: :tcp} = item), do: tcp_probe(host, item)
+  @spec probe(:inet.ip_address(), Item.t()) :: result()
+  def probe(ip, %Item{type: :icmp} = item), do: icmp_probe(ip, item)
+  def probe(ip, %Item{type: :tcp} = item), do: tcp_probe(ip, item)
 
-  def probe(%Host{address: address}, %Item{type: :udp} = item),
-    do: UdpProbe.probe(address, item.service, item.port, item.timeout)
+  def probe(ip, %Item{type: :udp} = item),
+    do: UdpProbe.probe(ip, item.service, item.port, item.timeout)
 
   @doc """
   Returns the ICMP method used here, for the startup message.
@@ -56,11 +56,13 @@ defmodule NexPinger.Prober do
 
   # ---- ICMP ----------------------------------------------------------
 
-  defp icmp_probe(%Host{address: address}, %Item{timeout: timeout}) do
+  defp icmp_probe(ip, %Item{timeout: timeout}) do
+    address = Resolver.to_string(ip)
+
     result =
       case {ping_command_forced?(), :os.type()} do
         {true, _os} -> {:error, :unavailable}
-        {_, {:unix, :linux}} -> IcmpSocket.ping(address, timeout)
+        {_, {:unix, :linux}} -> IcmpSocket.ping(ip, timeout)
         {_, {:win32, _}} -> IcmpHelper.ping(address, timeout)
         _ -> {:error, :unavailable}
       end
@@ -140,10 +142,11 @@ defmodule NexPinger.Prober do
 
   # ---- TCP -------------------------------------------------------------
 
-  defp tcp_probe(%Host{address: address}, %Item{port: port, timeout: timeout}) do
+  defp tcp_probe(ip, %Item{port: port, timeout: timeout}) do
     start = System.monotonic_time(:microsecond)
+    options = [:binary, Resolver.socket_family(ip), active: false]
 
-    case :gen_tcp.connect(to_charlist(address), port, [:binary, active: false], timeout) do
+    case :gen_tcp.connect(ip, port, options, timeout) do
       {:ok, socket} ->
         elapsed_us = System.monotonic_time(:microsecond) - start
         :gen_tcp.close(socket)

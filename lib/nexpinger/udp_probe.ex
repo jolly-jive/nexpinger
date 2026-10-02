@@ -5,6 +5,8 @@ defmodule NexPinger.UdpProbe do
   any UDP reply from the target as OK. The reply content is not checked.
   """
 
+  alias NexPinger.Resolver
+
   @type service :: :dns | :ntp | :quic
   @type result :: {:ok, rtt_ms :: float()} | {:error, reason :: String.t()}
 
@@ -24,18 +26,20 @@ defmodule NexPinger.UdpProbe do
 
   # A new socket per attempt, connected to the target: the OS drops datagrams
   # from other sources, and late replies to an earlier attempt can't arrive here.
-  @spec probe(String.t(), service(), :inet.port_number(), non_neg_integer()) :: result()
-  def probe(address, service, port, timeout_ms) do
-    with {:ok, family, ip} <- resolve(address),
-         {:ok, socket} <- :gen_udp.open(0, [:binary, family, active: false]) do
-      try do
-        exchange(socket, ip, port, payload(service), timeout_ms)
-      after
-        :gen_udp.close(socket)
-      end
-    else
-      {:error, reason} when is_binary(reason) -> {:error, reason}
-      {:error, reason} -> {:error, error_message(reason)}
+  @spec probe(:inet.ip_address(), service(), :inet.port_number(), non_neg_integer()) :: result()
+  def probe(ip, service, port, timeout_ms) do
+    family = Resolver.socket_family(ip)
+
+    case :gen_udp.open(0, [:binary, family, active: false]) do
+      {:ok, socket} ->
+        try do
+          exchange(socket, ip, port, payload(service), timeout_ms)
+        after
+          :gen_udp.close(socket)
+        end
+
+      {:error, reason} ->
+        {:error, error_message(reason)}
     end
   end
 
@@ -48,30 +52,6 @@ defmodule NexPinger.UdpProbe do
       {:ok, (System.monotonic_time(:microsecond) - started) / 1000.0}
     else
       {:error, reason} -> {:error, error_message(reason)}
-    end
-  end
-
-  defp resolve(address) do
-    charlist = to_charlist(address)
-
-    case :inet.parse_address(charlist) do
-      {:ok, ip} when tuple_size(ip) == 4 ->
-        {:ok, :inet, ip}
-
-      {:ok, ip} ->
-        {:ok, :inet6, ip}
-
-      {:error, _} ->
-        case :inet.getaddr(charlist, :inet) do
-          {:ok, ip} ->
-            {:ok, :inet, ip}
-
-          {:error, _} ->
-            case :inet.getaddr(charlist, :inet6) do
-              {:ok, ip} -> {:ok, :inet6, ip}
-              {:error, _} -> {:error, "unknown host"}
-            end
-        end
     end
   end
 

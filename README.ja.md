@@ -159,6 +159,8 @@ hosts:
 ```
 
 - ホストは `name` と `address` を持ち、`items` に1つ以上の監視項目を定義します
+- ホストの `family`（`ipv4`、`ipv6` または `auto`、省略時 `auto`）で使うアドレスファミリーを指定します。`address` がホスト名の場合、`ipv4` は A レコード、`ipv6` は AAAA レコードを引きます。`auto` は A レコードを引き、なければ AAAA レコードを引きます（A レコードがあれば、IPv4 で到達できなくても IPv6 は試しません）。`address` が IP アドレスで `family` と食い違う場合は設定エラーです
+- 名前解決は監視のたびに行い、DNS の変更に追従します。起動時に解決できないホストがあればエラーで終了します。起動後に解決できなくなった場合は、その回の監視を NG（`unknown host`）として監視を続けます
 - Item は `name`、`type`（`icmp`、`tcp` または `udp`）、`interval`（ミリ秒）、`timeout`（ミリ秒、省略時1000）を持ちます
 - `port` は `type: tcp` の場合に必須です
 - `service`（`dns`、`ntp` または `quic`）は `type: udp` の場合に必須です。`port` を省略するとサービスの標準ポート（dns: 53、ntp: 123、quic: 443）を使います
