@@ -5,6 +5,10 @@ defmodule NexPinger.Config do
 
   alias NexPinger.{Host, Item, Resolver, UdpProbe}
 
+  @top_keys ~w(hosts)
+  @host_keys ~w(name address family items)
+  @item_keys ~w(name type port service interval timeout)
+
   @spec load(String.t()) :: {:ok, [Host.t()]} | {:error, term()}
   def load(path) do
     with {:ok, content} <- File.read(path) do
@@ -19,6 +23,7 @@ defmodule NexPinger.Config do
 
   defp load_yaml(content) do
     with {:ok, doc} <- YamlElixir.read_from_string(content),
+         :ok <- check_keys!(doc, @top_keys, "top level"),
          hosts when is_list(hosts) <- Map.get(doc, "hosts", []) do
       {:ok, Enum.map(hosts, &to_host!/1)}
     else
@@ -87,7 +92,20 @@ defmodule NexPinger.Config do
     |> String.trim()
   end
 
+  # Unknown keys are errors, so a typo is not silently ignored
+  defp check_keys!(map, allowed, label) do
+    case Map.keys(map) -- allowed do
+      [] ->
+        :ok
+
+      unknown ->
+        raise "Unknown key: #{unknown |> Enum.sort() |> Enum.map_join(", ", &inspect/1)} (#{label})"
+    end
+  end
+
   defp to_host!(map) do
+    check_keys!(map, @host_keys, "host: #{inspect(map["name"])}")
+
     items =
       map
       |> Map.fetch!("items")
@@ -114,6 +132,8 @@ defmodule NexPinger.Config do
   end
 
   defp to_item!(map) do
+    check_keys!(map, @item_keys, "item: #{inspect(map["name"])}")
+
     type =
       case Map.get(map, "type", "icmp") do
         "icmp" -> :icmp

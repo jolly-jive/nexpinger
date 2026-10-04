@@ -200,6 +200,35 @@ defmodule NexPinger.ConfigTest do
     end
   end
 
+  test "rejects unknown keys" do
+    for {content, expected} <- [
+          {"""
+           host:
+             - name: server
+               address: 192.0.2.1
+               items: [{name: ping}]
+           """, ~s|Unknown key: "host" (top level)|},
+          {"""
+           hosts:
+             - name: server
+               adress: 192.0.2.1
+               address: 192.0.2.1
+               items: [{name: ping}]
+           """, ~s|Unknown key: "adress" (host: "server")|},
+          {"""
+           hosts:
+             - name: server
+               address: 192.0.2.1
+               items: [{name: ping, intervall: 500, timeot: 100}]
+           """, ~s|Unknown key: "intervall", "timeot" (item: "ping")|}
+        ] do
+      path = write_config!(content)
+
+      assert {:error, message} = Config.load(path)
+      assert message =~ expected
+    end
+  end
+
   defp write_config!(content) do
     path = Path.join(System.tmp_dir!(), "nexpinger-config-#{System.unique_integer([:positive])}.yml")
     File.write!(path, content)

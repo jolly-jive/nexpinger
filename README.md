@@ -165,6 +165,7 @@ hosts:
 - An Item has `name`, `type` (`icmp`, `tcp` or `udp`), `interval` (ms), and `timeout` (ms, default 1000)
 - `port` is required for `type: tcp`
 - `service` (`dns`, `ntp` or `quic`) is required for `type: udp`. `port` defaults to the service's standard port (dns: 53, ntp: 123, quic: 443)
+- An unknown key is a config error, so a typo is not silently ignored
 
 ### UDP checks
 

@@ -165,6 +165,7 @@ hosts:
 - Item は `name`、`type`（`icmp`、`tcp` または `udp`）、`interval`（ミリ秒）、`timeout`（ミリ秒、省略時1000）を持ちます
 - `port` は `type: tcp` の場合に必須です
 - `service`（`dns`、`ntp` または `quic`）は `type: udp` の場合に必須です。`port` を省略するとサービスの標準ポート（dns: 53、ntp: 123、quic: 443）を使います
+- 未定義のキーは設定エラーです。キー名の書き間違いが黙って無視されることはありません
 
 ### UDP 監視
 
