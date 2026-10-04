@@ -33,7 +33,8 @@
 
 ビルド済みのバイナリは [GitHub Releases](https://github.com/jolly-jive/nexpinger/releases) にあります。
 
-- `nexpinger`: escript。Erlang/OTP 27 以降が必要。escript には `icmp_helper.exe` を同梱できないため、Windows では ICMP に `ping.exe` を使う- `nexpinger.exe`: Windows 用の単体実行ファイル（Burrito）。Erlang は不要だが、Microsoft Visual C++ ランタイムが必要。初回起動時に `%APPDATA%\.burrito` 配下へ展開される
+- `nexpinger`: escript。Erlang/OTP 27 以降が必要。escript には `icmp_helper.exe` を同梱できないため、Windows では ICMP に `ping.exe` を使う。Windows では `nexpinger.exe` を推奨（[既知の問題](#既知の問題)を参照）
+- `nexpinger.exe`: Windows 用の単体実行ファイル（Burrito）。Erlang は不要だが、Microsoft Visual C++ ランタイムが必要。初回起動時に `%APPDATA%\.burrito` 配下へ展開される
 
 ## セットアップ
 
@@ -256,6 +257,11 @@ timestamp	host	address	resolved	mac	item	type	port	status	rtt_ms	error
 ```
 
 グラフ表示などの可視化機能は内蔵していません。TSV / JSON Lines のログを外部ツール（Excel、Livebook など）に読み込んで行う想定です。
+
+## 既知の問題
+
+- Windows の escript 版（`nexpinger`）では、`Ctrl+C` を押すと Erlang VM の BREAK メニューが表示される。`a` を入力して Enter で終了できる。`nexpinger.exe` ではこの問題は起きない
+- Windows では `Ctrl+Break` を押すと、`nexpinger.exe` でも同じ BREAK メニューが表示される。終了には `Ctrl+C` か `Q` を使う
 
 ## 今後実装したい項目（未着手）
 

@@ -190,8 +190,12 @@ defmodule NexPinger.CLI do
             :unavailable -> Process.sleep(:infinity)
           end
         else
-          # No key input: keep the main process alive (Ctrl+C to quit)
-          Process.sleep(:infinity)
+          # No key input: keep the main process alive (Ctrl+C to quit).
+          # Windows reads Ctrl+C as a key, or the VM would show its BREAK menu.
+          case TerminalInput.wait_for_interrupt() do
+            :quit -> System.halt(0)
+            :unavailable -> Process.sleep(:infinity)
+          end
         end
 
       {:error, reason} ->

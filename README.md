@@ -33,7 +33,8 @@ Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool tha
 
 Prebuilt binaries are on [GitHub Releases](https://github.com/jolly-jive/nexpinger/releases).
 
-- `nexpinger`: escript. Needs Erlang/OTP 27 or later. On Windows, ICMP uses `ping.exe` because an escript can't bundle `icmp_helper.exe`- `nexpinger.exe`: single Windows executable (Burrito). No Erlang needed, but needs the Microsoft Visual C++ runtime. On first run, it unpacks itself under `%APPDATA%\.burrito`
+- `nexpinger`: escript. Needs Erlang/OTP 27 or later. On Windows, ICMP uses `ping.exe` because an escript can't bundle `icmp_helper.exe`. On Windows, use `nexpinger.exe` instead (see [Known issues](#known-issues))
+- `nexpinger.exe`: single Windows executable (Burrito). No Erlang needed, but needs the Microsoft Visual C++ runtime. On first run, it unpacks itself under `%APPDATA%\.burrito`
 
 ## Setup
 
@@ -256,6 +257,11 @@ timestamp	host	address	resolved	mac	item	type	port	status	rtt_ms	error
 ```
 
 There is no built-in graphing. For charts, feed TSV / JSON Lines logs to an external tool (Excel, Livebook, etc.).
+
+## Known issues
+
+- On Windows, the escript (`nexpinger`) shows the Erlang VM's BREAK menu on `Ctrl+C`. Type `a` and Enter to quit. `nexpinger.exe` does not have this problem
+- On Windows, `Ctrl+Break` shows the same BREAK menu, in `nexpinger.exe` too. Use `Ctrl+C` or `Q` to quit
 
 ## Planned (not started)
 

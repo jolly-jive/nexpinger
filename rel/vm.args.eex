@@ -1,4 +1,5 @@
 ## VM flags of the release (Burrito binaries)
 
-## No BREAK menu: Ctrl+C stops the VM at once (Unix only)
+## No BREAK menu: Ctrl+C stops the VM at once.
+## Unix only. For Windows targets, NexPinger.BurritoBreak (mix.exs) turns it into +Bc
 +Bd

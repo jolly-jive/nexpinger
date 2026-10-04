@@ -150,6 +150,42 @@ defmodule NexPinger.TerminalInput do
     _error -> :unavailable
   end
 
+  @doc """
+  Waits for Ctrl+C when key input is not used (Windows only; `:unavailable` elsewhere).
+
+  The Windows VM shows its BREAK menu on a Ctrl+C event (`+Bd` is Unix only), while the
+  Burrito launcher just dies. The Burrito binary runs the VM with `+Bc` (see mix.exs),
+  which makes Ctrl+C a plain key instead of an event, so read it here.
+  """
+  def wait_for_interrupt do
+    if windows?() and windows_available?() do
+      case :shell.start_interactive({:noshell, :raw}) do
+        :ok ->
+          try do
+            interrupt_loop(&read_stdio_char/0)
+          after
+            :shell.start_interactive({:noshell, :cooked})
+          end
+
+        {:error, _reason} ->
+          :unavailable
+      end
+    else
+      :unavailable
+    end
+  rescue
+    _error -> :unavailable
+  end
+
+  @doc "Reads keys until Ctrl+C (`:quit`). `:unavailable` when the input ends, e.g. stdin is NUL."
+  def interrupt_loop(read) do
+    case read.() do
+      {:ok, <<3>>} -> :quit
+      {:ok, _key} -> interrupt_loop(read)
+      _ -> :unavailable
+    end
+  end
+
   defp read_stdio_char do
     case :io.get_chars(:standard_io, ~c"", 1) do
       :eof -> :eof

@@ -91,6 +91,27 @@ defmodule NexPinger.BurritoPrune do
   end
 end
 
+defmodule NexPinger.BurritoBreak do
+  @moduledoc """
+  Burrito step (after :patch): sets the VM's Ctrl+C flag for the target OS.
+
+  rel/vm.args.eex has +Bd, which only the Unix VM honors. The Windows VM gets +Bc:
+  Ctrl+C is then no console event (no BREAK menu, and the launcher stays alive)
+  but a plain key, which NexPinger.TerminalInput reads.
+  """
+
+  def execute(context) do
+    if context.target.os == :windows do
+      for path <- Path.wildcard(Path.join(context.work_dir, "releases/*/vm.args")) do
+        File.write!(path, String.replace(File.read!(path), ~r/^\+Bd$/m, "+Bc"))
+        Mix.shell().info("Set +Bc in #{Path.relative_to(path, context.work_dir)}")
+      end
+    end
+
+    context
+  end
+end
+
 defmodule NexPinger.MixProject do
   use Mix.Project
 
@@ -136,7 +157,7 @@ defmodule NexPinger.MixProject do
             windows: [os: :windows, cpu: :x86_64],
             linux: [os: :linux, cpu: :x86_64]
           ],
-          extra_steps: [patch: [post: [NexPinger.BurritoPrune]]]
+          extra_steps: [patch: [post: [NexPinger.BurritoPrune, NexPinger.BurritoBreak]]]
         ]
       ]
     ]
