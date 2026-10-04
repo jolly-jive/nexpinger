@@ -7,10 +7,10 @@ defmodule NexPinger.ResolverTest do
 
   describe "resolve/2" do
     test "returns an IP literal as is" do
-      assert Resolver.resolve("192.0.2.1", :auto) == {:ok, {192, 0, 2, 1}}
-      assert Resolver.resolve("192.0.2.1", :ipv4) == {:ok, {192, 0, 2, 1}}
-      assert Resolver.resolve("::1", :auto) == {:ok, @v6_loopback}
-      assert Resolver.resolve("::1", :ipv6) == {:ok, @v6_loopback}
+      assert Resolver.resolve("192.0.2.1", :auto) == {:ok, [{192, 0, 2, 1}]}
+      assert Resolver.resolve("192.0.2.1", :ipv4) == {:ok, [{192, 0, 2, 1}]}
+      assert Resolver.resolve("::1", :auto) == {:ok, [@v6_loopback]}
+      assert Resolver.resolve("::1", :ipv6) == {:ok, [@v6_loopback]}
     end
 
     test "rejects an IP literal of the other family" do
@@ -18,9 +18,9 @@ defmodule NexPinger.ResolverTest do
       assert Resolver.resolve("::1", :ipv4) == {:error, "not an IPv4 address"}
     end
 
-    test "resolves a name to the family's record" do
-      assert {:ok, {127, _, _, _}} = Resolver.resolve("localhost", :ipv4)
-      assert {:ok, {127, _, _, _}} = Resolver.resolve("localhost", :auto)
+    test "resolves a name to the family's records" do
+      assert {:ok, [{127, _, _, _} | _]} = Resolver.resolve("localhost", :ipv4)
+      assert {:ok, [{127, _, _, _} | _]} = Resolver.resolve("localhost", :auto)
     end
 
     test "an unknown host" do

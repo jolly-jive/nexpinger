@@ -28,6 +28,8 @@ defmodule NexPinger.RunnerTest do
     host = %Host{
       name: "local-test",
       address: "127.0.0.1",
+      ip: {127, 0, 0, 1},
+      resolved: "127.0.0.1",
       items: []
     }
 
@@ -75,6 +77,8 @@ defmodule NexPinger.RunnerTest do
     host = %Host{
       name: "immediate-check",
       address: "127.0.0.1",
+      ip: {127, 0, 0, 1},
+      resolved: "127.0.0.1",
       items: []
     }
 

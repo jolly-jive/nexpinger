@@ -94,8 +94,37 @@ defmodule NexPinger.CLITest do
       %NexPinger.Host{name: "ng", address: "no-such-host.invalid", family: :ipv4, items: []}
     ]
 
-    assert [message] = NexPinger.CLI.resolve_errors(hosts)
+    assert {:error, [message]} = NexPinger.CLI.resolve_hosts(hosts)
     assert message =~ "ng: no-such-host.invalid (family: ipv4): unknown host"
+  end
+
+  test "sets the IP of each host at startup" do
+    hosts = [%NexPinger.Host{name: "ok", address: "127.0.0.1", items: []}]
+
+    assert {:ok, [host], []} = NexPinger.CLI.resolve_hosts(hosts)
+    assert host.ip == {127, 0, 0, 1}
+    assert host.resolved == "127.0.0.1"
+  end
+
+  test "uses the first address of a name with several, and warns" do
+    hosts = [
+      %NexPinger.Host{name: "web", address: "www.example.com", items: []},
+      %NexPinger.Host{name: "db", address: "db.example.com", items: []}
+    ]
+
+    resolve = fn
+      "www.example.com", :auto -> {:ok, [{203, 0, 113, 10}, {203, 0, 113, 11}, {203, 0, 113, 12}]}
+      "db.example.com", :auto -> {:ok, [{192, 0, 2, 1}]}
+    end
+
+    assert {:ok, [web, db], [warning]} = NexPinger.CLI.resolve_hosts(hosts, resolve)
+    assert web.ip == {203, 0, 113, 10}
+    assert web.resolved == "203.0.113.10"
+    assert db.resolved == "192.0.2.1"
+
+    assert warning ==
+             "Multiple addresses for web: www.example.com: using 203.0.113.10 " <>
+               "(also 203.0.113.11, 203.0.113.12)"
   end
 
   test "parses the version flag" do

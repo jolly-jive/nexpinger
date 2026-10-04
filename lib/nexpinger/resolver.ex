@@ -1,20 +1,21 @@
 defmodule NexPinger.Resolver do
   @moduledoc """
-  Resolves a host address to an IP of the host's family.
-    * `:ipv4` / `:ipv6`: an IP literal of that family, or the A / AAAA record
-    * `:auto`: any IP literal, or the A record, else the AAAA record
+  Resolves a host address to the IPs of the host's family, in DNS order.
+    * `:ipv4` / `:ipv6`: an IP literal of that family, or the A / AAAA records
+    * `:auto`: any IP literal, or the A records, else the AAAA records
   """
 
   @type family :: :ipv4 | :ipv6 | :auto
 
-  @spec resolve(String.t(), family()) :: {:ok, :inet.ip_address()} | {:error, String.t()}
+  @spec resolve(String.t(), family()) ::
+          {:ok, [:inet.ip_address(), ...]} | {:error, String.t()}
   def resolve(address, family) do
     charlist = to_charlist(address)
 
     case :inet.parse_address(charlist) do
       {:ok, ip} ->
         if family in [:auto, ip_family(ip)],
-          do: {:ok, ip},
+          do: {:ok, [ip]},
           else: {:error, "not an #{family_name(family)} address"}
 
       {:error, _} ->
@@ -27,9 +28,9 @@ defmodule NexPinger.Resolver do
   end
 
   defp lookup(charlist, family) do
-    case :inet.getaddr(charlist, socket_family(family)) do
-      {:ok, ip} -> {:ok, ip}
-      {:error, _} -> {:error, "unknown host"}
+    case :inet.getaddrs(charlist, socket_family(family)) do
+      {:ok, [_ | _] = ips} -> {:ok, Enum.uniq(ips)}
+      _ -> {:error, "unknown host"}
     end
   end
 

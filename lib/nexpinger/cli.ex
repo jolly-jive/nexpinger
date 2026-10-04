@@ -129,14 +129,15 @@ defmodule NexPinger.CLI do
         System.halt(1)
 
       {:ok, hosts} ->
-        case resolve_errors(hosts) do
-          [] ->
-            :ok
+        {hosts, address_warnings} =
+          case resolve_hosts(hosts) do
+            {:ok, hosts, warnings} ->
+              {hosts, warnings}
 
-          errors ->
-            Enum.each(errors, &IO.puts(:stderr, &1))
-            System.halt(1)
-        end
+            {:error, errors} ->
+              Enum.each(errors, &IO.puts(:stderr, &1))
+              System.halt(1)
+          end
 
         item_count = Enum.sum(Enum.map(hosts, &length(&1.items)))
         stats_width = requested_stats_width || TerminalInput.terminal_width()
@@ -159,7 +160,7 @@ defmodule NexPinger.CLI do
           IO.puts("ICMP: #{Prober.icmp_method()}")
         end
 
-        Enum.each(ntp_warnings(hosts), &IO.puts(:stderr, &1))
+        Enum.each(address_warnings ++ ntp_warnings(hosts), &IO.puts(:stderr, &1))
 
         IO.puts(String.duplicate("-", 60))
 
@@ -200,14 +201,35 @@ defmodule NexPinger.CLI do
   end
 
   @doc """
-  Resolves every host once at startup. Returns a message per host that fails.
-  Later failures only make that probe NG.
+  Resolves every host once at startup; probes keep that IP until exit.
+  A name with several addresses uses the first one and gets a warning.
+  Returns a message per host that fails, if any.
   """
-  @spec resolve_errors([NexPinger.Host.t()]) :: [String.t()]
-  def resolve_errors(hosts) do
-    for host <- hosts,
-        {:error, reason} <- [Resolver.resolve(host.address, host.family)] do
-      "Cannot resolve #{host.name}: #{host.address} (family: #{host.family}): #{reason}"
+  @spec resolve_hosts([NexPinger.Host.t()], function()) ::
+          {:ok, [NexPinger.Host.t()], warnings :: [String.t()]} | {:error, [String.t()]}
+  def resolve_hosts(hosts, resolve \\ &Resolver.resolve/2) do
+    results = Enum.map(hosts, &{&1, resolve.(&1.address, &1.family)})
+
+    errors =
+      for {host, {:error, reason}} <- results do
+        "Cannot resolve #{host.name}: #{host.address} (family: #{host.family}): #{reason}"
+      end
+
+    if errors == [] do
+      hosts =
+        for {host, {:ok, [ip | _]}} <- results do
+          %{host | ip: ip, resolved: Resolver.to_string(ip)}
+        end
+
+      warnings =
+        for {host, {:ok, [ip | [_ | _] = others]}} <- results do
+          "Multiple addresses for #{host.name}: #{host.address}: using #{Resolver.to_string(ip)} " <>
+            "(also #{Enum.map_join(others, ", ", &Resolver.to_string/1)})"
+        end
+
+      {:ok, hosts, warnings}
+    else
+      {:error, errors}
     end
   end
 

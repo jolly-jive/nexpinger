@@ -160,8 +160,8 @@ hosts:
 ```
 
 - A host has `name` and `address`, and one or more checks in `items`
-- A host's `family` (`ipv4`, `ipv6` or `auto`, default `auto`) sets the address family. For a host name in `address`, `ipv4` looks up the A record and `ipv6` the AAAA record. `auto` looks up the A record, else the AAAA record (if there is an A record, IPv6 is not tried even when IPv4 is unreachable). An IP address in `address` that does not match `family` is a config error
-- Names are resolved on every check, so DNS changes are followed. A host that cannot be resolved at startup is an error and NexPinger exits. If resolution fails later, that check is NG (`unknown host`) and monitoring goes on
+- A host's `family` (`ipv4`, `ipv6` or `auto`, default `auto`) sets the address family. For a host name in `address`, `ipv4` looks up the A record and `ipv6` the AAAA record. `auto` looks up the A record, else the AAAA record (if there is an A record, IPv6 is not tried even when IPv4 is unreachable). This order can differ from the OS: where IPv6 is usable, the OS `ping` and other tools usually prefer IPv6 for a name with both records. Set `family: ipv6` to check the IPv6 address. An IP address in `address` that does not match `family` is a config error
+- Names are resolved once at startup, and that IP address is checked until exit. Later DNS changes are not followed; restart to resolve again. A host that cannot be resolved at startup is an error and NexPinger exits. If a name has several addresses, the first one is used and a message lists the others
 - An Item has `name`, `type` (`icmp`, `tcp` or `udp`), `interval` (ms), and `timeout` (ms, default 1000)
 - `port` is required for `type: tcp`
 - `service` (`dns`, `ntp` or `quic`) is required for `type: udp`. `port` defaults to the service's standard port (dns: 53, ntp: 123, quic: 443)
@@ -210,7 +210,7 @@ Times are local time, on screen and in files. The MAC address is shown only when
 | `timestamp` | Time of the check (local time, `2026-09-30 12:00:00.123`) |
 | `host` | Host name |
 | `address` | Address |
-| `resolved` | IP address used for the check (missing if resolution failed) |
+| `resolved` | IP address used for the check |
 | `mac` | MAC address (missing if not found) |
 | `item` | Item name |
 | `type` | `icmp` / `tcp` / `udp` |
