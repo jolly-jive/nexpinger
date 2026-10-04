@@ -56,9 +56,10 @@ defmodule NexPinger.BurritoPrune do
   @moduledoc """
   Burrito step (after :patch): removes what the release does not use.
 
-  Burrito copies every DLL / EXE of the Windows OTP into lib/, used or not
+  Burrito copies every DLL / EXE / SO of the target OTP into lib/, used or not
   (crypto with OpenSSL, wx with WebView2, ...). This keeps only the lib dirs
   of the release's apps, and drops ERTS debug builds and PDB files.
+  Non-Windows targets also drop the Windows ICMP helper.
   Less to ship, and less third-party code to give notices for.
   """
 
@@ -78,6 +79,13 @@ defmodule NexPinger.BurritoPrune do
 
     Enum.each(debug_files, &File.rm!/1)
     Mix.shell().info("Pruned #{length(debug_files)} ERTS debug files")
+
+    # The ICMP helper is Windows only
+    if context.target.os != :windows do
+      helpers = Path.wildcard(Path.join(context.work_dir, "lib/nexpinger-*/priv/bin/*.exe"))
+      Enum.each(helpers, &File.rm!/1)
+      Mix.shell().info("Pruned #{length(helpers)} Windows helpers")
+    end
 
     context
   end
@@ -125,7 +133,8 @@ defmodule NexPinger.MixProject do
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
           targets: [
-            windows: [os: :windows, cpu: :x86_64]
+            windows: [os: :windows, cpu: :x86_64],
+            linux: [os: :linux, cpu: :x86_64]
           ],
           extra_steps: [patch: [post: [NexPinger.BurritoPrune]]]
         ]

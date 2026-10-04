@@ -33,8 +33,7 @@
 
 ビルド済みのバイナリは [GitHub Releases](https://github.com/jolly-jive/nexpinger/releases) にあります。
 
-- `nexpinger`: escript。Erlang/OTP 27 以降が必要。escript には `icmp_helper.exe` を同梱できないため、Windows では ICMP に `ping.exe` を使う
-- `nexpinger.exe`: Windows 用の単体実行ファイル（Burrito）。Erlang は不要だが、Microsoft Visual C++ ランタイムが必要。初回起動時に `%APPDATA%\.burrito` 配下へ展開される
+- `nexpinger`: escript。Erlang/OTP 27 以降が必要。escript には `icmp_helper.exe` を同梱できないため、Windows では ICMP に `ping.exe` を使う- `nexpinger.exe`: Windows 用の単体実行ファイル（Burrito）。Erlang は不要だが、Microsoft Visual C++ ランタイムが必要。初回起動時に `%APPDATA%\.burrito` 配下へ展開される
 
 ## セットアップ
 
@@ -90,6 +89,16 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=windows
 ```powershell
 .\burrito_out\nexpinger_windows.exe --help
 .\burrito_out\nexpinger_windows.exe config\hosts.yml
+```
+
+Linux（x86_64）用は `BURRITO_TARGET=linux` を指定する。`BURRITO_TARGET` を省略すると全ターゲットをビルドする。
+Linux 用バイナリは musl ベースの ERTS を同梱するため、システムの glibc に依存しない。
+初回起動時に `~/.local/share/.burrito` 配下へ展開される。
+
+```bash
+ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux mix release
+./burrito_out/nexpinger_linux --help
+./burrito_out/nexpinger_linux config/hosts.yml
 ```
 
 ## CLI オプション

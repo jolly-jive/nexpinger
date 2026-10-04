@@ -74,7 +74,10 @@ jobs:
         env:
           MIX_ENV: test
 
+      # The Linux target is not released yet
       - run: mix release
+        env:
+          BURRITO_TARGET: windows
 
       - run: |
           mkdir dist

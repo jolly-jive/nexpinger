@@ -33,8 +33,7 @@ Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool tha
 
 Prebuilt binaries are on [GitHub Releases](https://github.com/jolly-jive/nexpinger/releases).
 
-- `nexpinger`: escript. Needs Erlang/OTP 27 or later. On Windows, ICMP uses `ping.exe` because an escript can't bundle `icmp_helper.exe`
-- `nexpinger.exe`: single Windows executable (Burrito). No Erlang needed, but needs the Microsoft Visual C++ runtime. On first run, it unpacks itself under `%APPDATA%\.burrito`
+- `nexpinger`: escript. Needs Erlang/OTP 27 or later. On Windows, ICMP uses `ping.exe` because an escript can't bundle `icmp_helper.exe`- `nexpinger.exe`: single Windows executable (Burrito). No Erlang needed, but needs the Microsoft Visual C++ runtime. On first run, it unpacks itself under `%APPDATA%\.burrito`
 
 ## Setup
 
@@ -90,6 +89,16 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=windows
 ```powershell
 .\burrito_out\nexpinger_windows.exe --help
 .\burrito_out\nexpinger_windows.exe config\hosts.yml
+```
+
+For Linux (x86_64), use `BURRITO_TARGET=linux`. Without `BURRITO_TARGET`, all targets are built.
+The Linux binary bundles a musl-based ERTS, so it doesn't depend on the system's glibc.
+On first run, it unpacks itself under `~/.local/share/.burrito`.
+
+```bash
+ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux mix release
+./burrito_out/nexpinger_linux --help
+./burrito_out/nexpinger_linux config/hosts.yml
 ```
 
 ## CLI options
