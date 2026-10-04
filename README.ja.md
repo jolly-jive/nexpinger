@@ -16,7 +16,7 @@
   - Windows: `IcmpSendEcho2` / `Icmp6SendEcho2` を呼ぶ補助プログラム（`priv/bin/icmp_helper.exe`）で送信。補助プログラムが無い・実行できない場合は `ping.exe` にフォールバック（表示言語に依存しない方法で結果を読み取る）
   - その他の OS: OS の `ping` コマンドを実行
   - 起動時に使用する方法（とフォールバックの理由）を `ICMP: ...` として表示
-- TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測）
+- TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測。[TCP 監視](#tcp-監視)を参照）
 - UDP Ping（DNS / NTP / QUIC の要求を送り、応答の有無を確認。[UDP 監視](#udp-監視)を参照）
 - 1行1項目のストリーム出力（成功=緑 OK / 失敗=赤 NG）
 - TTY で `Tab` を押すと Ping結果の追記表示と Ping統計を切り替え
@@ -167,6 +167,18 @@ hosts:
 - `service`（`dns`、`ntp` または `quic`）は `type: udp` の場合に必須です。`port` を省略するとサービスの標準ポート（dns: 53、ntp: 123、quic: 443）を使います
 - 未定義のキーは設定エラーです。キー名の書き間違いが黙って無視されることはありません
 
+### ICMP 監視
+
+- Echo Request を1つ送り、対応する Echo Reply が `timeout` までに返れば OK です
+- RTT の刻みは送信方法によって違います。ICMP ソケットと `icmp_helper.exe` は 1 ms 未満も計測します。`ping` コマンドでは表示された値をそのまま使うため、Windows の `ping.exe` では 1 ms 刻みになり、`<1ms` は 1 ms として扱います
+
+### TCP 監視
+
+- 3-way handshake が完了すれば OK です。データは送受信せず、すぐに切断します。ポートが接続を受け付けることの確認であり、サービスが正常に動いていることの確認ではありません
+- RTT は接続にかかった時間（SYN から SYN/ACK まで）です
+- 接続拒否（RST）、または `timeout` までに接続が完了しない場合は NG です
+- 途中の機器（ファイアウォールの SYN proxy、ロードバランサなど）が handshake を代行する場合、OK と RTT はその機器のものになります
+
 ### UDP 監視
 
 UDP 監視では、サービスが応答する要求を送り、**応答の有無のみを判定します。応答の内容は検査しません。** 目的はネットワーク的な到達性の確認なので、DNS の NXDOMAIN や REFUSED、NTP の Kiss-o'-Death、形式の崩れた応答も OK として扱います。
@@ -177,7 +189,7 @@ UDP 監視では、サービスが応答する要求を送り、**応答の有�
 | `ntp` | NTPv4 クライアント要求（mode 3）、48 バイト |
 | `quic` | 予約済みの未対応バージョン（`0x1a2a3a4a`）を持つ Long Header Initial。1200 バイトまで埋める。サーバは Version Negotiation を返す |
 
-- RTT は要求の送信から最初の応答までの時間です。RD=0 のため、DNS フルリゾルバは再帰問い合わせをせずキャッシュから応答（または拒否）し、RTT に再帰の時間は含まれません
+- RTT は要求の送信から最初の応答までの時間で、相手サーバの処理時間を含みます。RD=0 のため、DNS フルリゾルバは再帰問い合わせをせずキャッシュから応答（または拒否）し、RTT に再帰の時間は含まれません
 - `timeout` までに応答がなければ NG（`timeout`）です
 - ICMP Port Unreachable は UDP の応答ではないため NG（`port unreachable`）とします。TCP で RST を NG とするのと同じ扱いです。対象ホスト自身ではなくファイアウォール（iptables の `REJECT` など）が返すこともあります
 - 公開 NTP サーバの多くは問い合わせ頻度を制限しており、頻繁に問い合わせると Kiss-o'-Death を返したり要求を破棄したりします。そのため NTP の Item の `interval` は省略時 8000 ミリ秒とし、8000 ミリ秒未満を指定した場合は起動時に警告を表示します。自分で管理していないサーバには 8000 ミリ秒以上を指定してください

@@ -16,7 +16,7 @@ Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool tha
   - Windows: sends via a helper (`priv/bin/icmp_helper.exe`) that calls `IcmpSendEcho2` / `Icmp6SendEcho2`. If the helper is missing or can't run, falls back to `ping.exe` (parsed independently of the display language)
   - Other OSes: runs the OS `ping` command
   - Shows the method in use (and any fallback reason) at startup as `ICMP: ...`
-- TCP ping (checks `:gen_tcp.connect` and measures the RTT)
+- TCP ping (checks `:gen_tcp.connect` and measures the RTT; see [TCP checks](#tcp-checks))
 - UDP ping (sends a DNS / NTP / QUIC request and waits for any reply; see [UDP checks](#udp-checks))
 - Streams one line per result (OK in green / NG in red)
 - On a TTY, `Tab` switches between the result stream and Ping Statistics
@@ -167,6 +167,18 @@ hosts:
 - `service` (`dns`, `ntp` or `quic`) is required for `type: udp`. `port` defaults to the service's standard port (dns: 53, ntp: 123, quic: 443)
 - An unknown key is a config error, so a typo is not silently ignored
 
+### ICMP checks
+
+- Sends one Echo Request. OK if the matching Echo Reply comes back within `timeout`
+- RTT resolution depends on the method. The ICMP socket and `icmp_helper.exe` measure below 1 ms. The `ping` command's printed value is used as is, so with Windows `ping.exe` the RTT is in whole ms, and `<1ms` counts as 1 ms
+
+### TCP checks
+
+- OK when the 3-way handshake completes. No data is sent or received, and the connection is closed at once. This shows the port accepts connections, not that the service works
+- RTT is the time to connect (SYN to SYN/ACK)
+- A refused connection (RST), or no connection within `timeout`, is NG
+- If a device on the path (a firewall's SYN proxy, a load balancer, etc.) completes the handshake for the target, the OK and the RTT are that device's
+
 ### UDP checks
 
 A UDP check sends a request that makes the service reply, and **only checks whether a reply comes back. It does not inspect the reply content.** The goal is network reachability, so a DNS NXDOMAIN or REFUSED, an NTP Kiss-o'-Death, or a malformed reply all count as OK.
@@ -177,7 +189,7 @@ A UDP check sends a request that makes the service reply, and **only checks whet
 | `ntp` | NTPv4 client request (mode 3), 48 bytes |
 | `quic` | Long header Initial with a reserved, unsupported version (`0x1a2a3a4a`), padded to 1200 bytes. The server replies with Version Negotiation |
 
-- RTT is the time from sending the request to the first reply. With RD=0, a DNS resolver answers from its cache (or refuses) without recursing, so the RTT does not include recursion time
+- RTT is the time from sending the request to the first reply, including the server's processing time. With RD=0, a DNS resolver answers from its cache (or refuses) without recursing, so the RTT does not include recursion time
 - No reply within `timeout` is NG (`timeout`)
 - An ICMP Port Unreachable is not a UDP reply, so it is NG (`port unreachable`). This matches TCP, where a RST is NG. It may also come from a firewall (e.g. iptables `REJECT`) rather than the target itself
 - Public NTP servers often rate-limit clients that poll too often, and may reply with Kiss-o'-Death or drop requests. So an NTP item's `interval` defaults to 8000 ms, and a warning is shown at startup if it is set under 8000 ms. Use 8000 ms or more for servers you don't run yourself
