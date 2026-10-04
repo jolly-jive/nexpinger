@@ -2,9 +2,13 @@ defmodule NexPinger.TerminalInput do
   @moduledoc """
   Handles stats screen key input in raw mode when a TTY is available.
   Unix: stty. Windows: `:shell.start_interactive({:noshell, :raw})` (OTP 26+).
+  Under Burrito on Linux, the BEAM's stdout is a pipe to the launcher, so the
+  launcher's stdout decides if a TTY is available.
   """
 
-  alias NexPinger.ConsoleSubscriber
+  alias NexPinger.{ConsoleSubscriber, Launcher}
+
+  @saved {__MODULE__, :saved}
 
   def available? do
     if windows?(), do: windows_available?(), else: unix_available?()
@@ -24,21 +28,48 @@ defmodule NexPinger.TerminalInput do
   end
 
   def terminal_width do
-    case :io.columns() do
-      {:ok, columns} when columns >= 120 -> 120
+    case terminal_size() do
+      {_rows, columns} when columns >= 120 -> 120
       _ -> 80
     end
-  rescue
-    _error -> 80
   end
 
   def terminal_height do
-    case :io.rows() do
-      {:ok, rows} when rows > 0 -> rows
+    case terminal_size() do
+      {rows, _columns} when rows > 0 -> rows
       _ -> 24
     end
+  end
+
+  # :io.columns / :io.rows fail when the BEAM's stdout is a pipe (Burrito on Unix); ask stty then.
+  defp terminal_size do
+    with {:ok, columns} <- :io.columns(),
+         {:ok, rows} <- :io.rows() do
+      {rows, columns}
+    else
+      _ -> stty_size()
+    end
   rescue
-    _error -> 24
+    _error -> nil
+  end
+
+  defp stty_size do
+    with {:ok, output} <- stty(["size"]) do
+      parse_size(output)
+    else
+      _ -> nil
+    end
+  end
+
+  @doc "Parses the output of `stty size` (\"ROWS COLUMNS\") into `{rows, columns}`."
+  def parse_size(output) do
+    with [rows, columns] <- String.split(output),
+         {rows, ""} <- Integer.parse(rows),
+         {columns, ""} <- Integer.parse(columns) do
+      {rows, columns}
+    else
+      _ -> nil
+    end
   end
 
   def run do
@@ -48,6 +79,8 @@ defmodule NexPinger.TerminalInput do
   defp unix_run do
     with {:ok, original_settings} <- stty(["-g"]),
          {:ok, device} <- File.open(tty_path(), [:read, :raw, :binary]) do
+      :persistent_term.put(@saved, {stty_prefix(), String.trim(original_settings), tty_path()})
+
       try do
         case stty(["raw", "-echo", "opost"]) do
           {:ok, _output} -> input_loop(fn -> :file.read(device, 1) end)
@@ -57,6 +90,7 @@ defmodule NexPinger.TerminalInput do
         try do
           ConsoleSubscriber.end_stats_view()
         after
+          :persistent_term.erase(@saved)
           stty([String.trim(original_settings)])
           File.close(device)
         end
@@ -66,6 +100,29 @@ defmodule NexPinger.TerminalInput do
     end
   rescue
     _error -> :unavailable
+  end
+
+  @doc """
+  Restores the terminal from another process, before a halt (Unix).
+  Writes to the TTY device, not stdout: under Burrito the stdout pipe may be broken.
+  """
+  def restore do
+    case :persistent_term.get(@saved, nil) do
+      {prefix, settings, tty_path} ->
+        if ConsoleSubscriber.stats_view?() do
+          File.write(tty_path, ConsoleSubscriber.leave_stats_screen())
+        end
+
+        System.cmd("stty", prefix ++ [settings], stderr_to_stdout: true)
+        :ok
+
+      nil ->
+        :ok
+    end
+  rescue
+    _error -> :ok
+  catch
+    :exit, _reason -> :ok
   end
 
   # Windows has no stty or /proc; use OTP 26+ noshell raw mode.
@@ -164,9 +221,9 @@ defmodule NexPinger.TerminalInput do
   end
 
   defp stty_prefix do
-    with true <- terminal_stdio?(),
+    with true <- terminal_stdio?() or Launcher.burrito?(),
          {:ok, input_path} <- fd_path(0),
-         {:ok, output_path} <- fd_path(1),
+         {:ok, output_path} <- stdout_path(),
          true <- input_path == output_path do
       case :os.type() do
         {:unix, :linux} -> ["-F", input_path]
@@ -197,11 +254,21 @@ defmodule NexPinger.TerminalInput do
     _error -> false
   end
 
-  defp fd_path(fd) do
+  defp fd_path(fd, pid \\ System.pid()) do
     case :os.type() do
-      {:unix, :linux} -> File.read_link("/proc/#{System.pid()}/fd/#{fd}")
+      {:unix, :linux} -> File.read_link("/proc/#{pid}/fd/#{fd}")
       {:unix, :darwin} -> File.read_link("/dev/fd/#{fd}")
       _ -> {:error, :unsupported_os}
+    end
+  end
+
+  # Burrito's Unix launcher pipes the BEAM's stdout through itself,
+  # so the real stdout is the launcher's (the parent process).
+  defp stdout_path do
+    if Launcher.burrito?() do
+      with {:ok, pid} <- Launcher.parent_pid(), do: fd_path(1, pid)
+    else
+      fd_path(1)
     end
   end
 end

@@ -17,6 +17,14 @@ defmodule NexPinger.ConsoleSubscriber do
   @enter_stats_screen "\e[?1049h\e[?25l\e[2J\e[H"
   @leave_stats_screen "\e[?25h\e[?1049l"
 
+  # Kept outside the process state: must be readable when this process is down
+  @stats_view {__MODULE__, :stats_view}
+
+  def leave_stats_screen, do: @leave_stats_screen
+
+  @doc "True while the stats screen is shown."
+  def stats_view?, do: :persistent_term.get(@stats_view, false)
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -60,6 +68,7 @@ defmodule NexPinger.ConsoleSubscriber do
 
   def handle_call(:end_stats_view, _from, %{mode: :stats} = state) do
     IO.write(@leave_stats_screen)
+    :persistent_term.put(@stats_view, false)
     {:reply, :ok, %{state | mode: :results}}
   end
 
@@ -68,12 +77,14 @@ defmodule NexPinger.ConsoleSubscriber do
   @impl true
   def handle_cast(:toggle_view, %{mode: :results} = state) do
     IO.write(@enter_stats_screen)
+    :persistent_term.put(@stats_view, true)
     state = render_stats(%{state | mode: :stats, offset: 0})
     {:noreply, state}
   end
 
   def handle_cast(:toggle_view, %{mode: :stats} = state) do
     IO.write(@leave_stats_screen)
+    :persistent_term.put(@stats_view, false)
     {:noreply, %{state | mode: :results}}
   end
 

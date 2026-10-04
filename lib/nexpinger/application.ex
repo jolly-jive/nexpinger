@@ -7,14 +7,21 @@ defmodule NexPinger.Application do
   def start(_type, _args) do
     children = [
       {Registry, keys: :unique, name: NexPinger.MonitorRegistry},
-      {DynamicSupervisor,
-       strategy: :one_for_one,
-       name: NexPinger.MonitorSupervisor},
+      {DynamicSupervisor, strategy: :one_for_one, name: NexPinger.MonitorSupervisor},
       NexPinger.Broadcaster,
       NexPinger.ConsoleSubscriber,
       NexPinger.IcmpHelper,
       NexPinger.MacResolver
     ]
+
+    # The Burrito launcher dies on SIGTERM without stopping the BEAM
+    children =
+      if NexPinger.Launcher.watchable?() do
+        NexPinger.SignalHandler.install()
+        children ++ [NexPinger.Launcher]
+      else
+        children
+      end
 
     {:ok, supervisor} =
       Supervisor.start_link(children, strategy: :one_for_one, name: NexPinger.Supervisor)
@@ -25,13 +32,11 @@ defmodule NexPinger.Application do
     # Burrito starts the VM with `erl -s elixir start_cli ... -extra <args>`. If start/2 returns,
     # Kernel.CLI parses the user's args: it grabs --help, runs the config file as an Elixir
     # script, and halts the VM (no --no-halt). So run CLI.main/1 here and exit via System.halt/1.
-    if burrito?() do
+    if NexPinger.Launcher.burrito?() do
       argv = :init.get_plain_arguments() |> Enum.map(&to_string/1)
       NexPinger.CLI.main(argv)
     end
 
     {:ok, supervisor}
   end
-
-  defp burrito?, do: System.get_env("__BURRITO") != nil
 end
