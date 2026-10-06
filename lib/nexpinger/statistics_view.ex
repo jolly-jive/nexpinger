@@ -31,7 +31,7 @@ defmodule NexPinger.StatisticsView do
       String.duplicate("-", width)
     ]
 
-    row_lines = Enum.map(displayed, &(&1 |> format_entry(column_widths) |> fit(width)))
+    row_lines = Enum.map(displayed, &format_entry(&1, column_widths, width))
 
     footer =
       "Rows #{if entries == [], do: 0, else: offset + 1}-#{finish} of #{length(entries)} | TAB: Ping Results | Up/Down: scroll | Q: quit"
@@ -44,14 +44,14 @@ defmodule NexPinger.StatisticsView do
     max(entry_count - max(height - 5, 1), 0)
   end
 
-  defp format_entry(entry, widths) do
+  defp format_entry(entry, widths, width) do
     latency = Statistics.latency(entry)
     attempts = entry.attempts
 
     latest =
       case entry.latest do
         nil -> "-"
-        {:ok, rtt_ms} -> "OK " <> format_number(rtt_ms, Enum.at(widths, 4) - 3)
+        {:ok, rtt_ms} -> "ok " <> format_number(rtt_ms, Enum.at(widths, 4) - 3)
         {:error, _reason} -> "NG"
       end
 
@@ -75,7 +75,22 @@ defmodule NexPinger.StatisticsView do
       format_optional_number(latency.p99, Enum.at(widths, 7))
     ]
 
-    format_row(values, widths, [:left, :right, :right, :right, :left, :right, :right, :right])
+    row =
+      values
+      |> format_row(widths, [:left, :right, :right, :right, :left, :right, :right, :right])
+      |> fit(width)
+
+    case entry.latest do
+      {:error, _reason} -> paint_ng(row, widths)
+      _ -> row
+    end
+  end
+
+  # Colors after padding, so ANSI codes do not count toward the width.
+  defp paint_ng(row, widths) do
+    start = (widths |> Enum.take(4) |> Enum.sum()) + 4 * 3
+    {head, "NG" <> tail} = String.split_at(row, start)
+    head <> IO.ANSI.red() <> "NG" <> IO.ANSI.reset() <> tail
   end
 
   defp target_label(host_name, item_name, nil), do: "#{host_name}/#{item_name}"

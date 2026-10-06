@@ -28,7 +28,7 @@ defmodule NexPinger.FileSubscriberTest do
     test "keeps the fixed-width console layout" do
       assert record(:text, tcp_host(), tcp_item(), {:ok, 45.671}) ==
                "2026-09-30 12:00:00.123 | web/https:443           (192.0.2.10     ) " <>
-                 "00:00:5e:00:53:01 TCP  OK    45.67 ms\n"
+                 "00:00:5e:00:53:01 TCP  ok    45.67 ms\n"
 
       assert record(:text, icmp_host(), icmp_item(), {:error, "timeout"}) =~
                ~r/ICMP NG  timeout\n$/

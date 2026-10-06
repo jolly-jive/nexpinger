@@ -161,6 +161,6 @@ defmodule NexPinger.FileSubscriber do
   defp mac_label(%Host{mac_address: nil}), do: String.duplicate(" ", 18)
   defp mac_label(%Host{mac_address: mac}), do: mac <> " "
 
-  defp status_tag(:ok), do: "OK "
+  defp status_tag(:ok), do: "ok "
   defp status_tag(:ng), do: "NG "
 end

@@ -18,7 +18,7 @@ Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool tha
   - Shows the method in use (and any fallback reason) at startup as `ICMP: ...`
 - TCP ping (checks `:gen_tcp.connect` and measures the RTT; see [TCP checks](#tcp-checks))
 - UDP ping (sends a DNS / NTP / QUIC request and waits for any reply; see [UDP checks](#udp-checks))
-- Streams one line per result (OK in green / NG in red)
+- Streams one line per result (ok in green / NG in red)
 - On a TTY, `Tab` switches between the result stream and Ping Statistics
 - On a TTY, `Q` quits (`Ctrl+C` also works)
 - Ping Statistics shows, per Item: runs, failures, loss rate, latest RTT, average, P95, P99
@@ -118,7 +118,7 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux_x
 
 Without `--log-file`, nothing is written to a file.
 
-On a TTY, `Tab` switches between Ping Results and Ping Statistics. On the stats screen, scroll with the Up/Down keys or `j`/`k`, and quit with `Q`. Stats are shown per Host/Item. Runs, failures, and loss rate are totals since startup. Average, P95, and P99 use only successful RTTs in the last `N` attempts; failures are excluded. The Latest column shows `OK <RTT>` on success and `NG` on failure. The unit is shown at the top as `RTT: ms`. A bell rings on failure on both screens. Without a TTY, output is the plain result stream.
+On a TTY, `Tab` switches between Ping Results and Ping Statistics. On the stats screen, scroll with the Up/Down keys or `j`/`k`, and quit with `Q`. Stats are shown per Host/Item. Runs, failures, and loss rate are totals since startup. Average, P95, and P99 use only successful RTTs in the last `N` attempts; failures are excluded. The Latest column shows `ok <RTT>` on success and `NG` in red on failure. The unit is shown at the top as `RTT: ms`. A bell rings on failure on both screens. Without a TTY, output is the plain result stream.
 
 Percentiles use the nearest-rank method. With no RTT samples, `-` is shown.
 
@@ -217,10 +217,10 @@ A UDP check sends a request that makes the service reply, and **only checks whet
 ## Sample output
 
 ```
-2026-09-16 12:00:00.123 | gateway/ping            (192.168.1.1             ) 00:00:5e:00:53:01 ICMP OK    1.23 ms
-2026-09-16 12:00:01.456 | web-server/https:443    (example.com=203.0.113.10)                   TCP  OK   45.67 ms
+2026-09-16 12:00:00.123 | gateway/ping            (192.168.1.1             ) 00:00:5e:00:53:01 ICMP ok    1.23 ms
+2026-09-16 12:00:01.456 | web-server/https:443    (example.com=203.0.113.10)                   TCP  ok   45.67 ms
 2026-09-16 12:00:02.789 | dns-server/ping         (192.168.1.10            )                   ICMP NG    timeout
-2026-09-16 12:00:03.012 | dns-server/dns:53       (192.168.1.10            )                   UDP  OK    2.34 ms
+2026-09-16 12:00:03.012 | dns-server/dns:53       (192.168.1.10            )                   UDP  ok    2.34 ms
 ```
 
 Times are local time, on screen and in files. The MAC address is shown only when found in the neighbor table, which holds on-link hosts only; otherwise the same width is left blank. Lookups are cached per IP for 15 s. When `address` is a host name, the resolved IP is shown with it as `name=IP`. The address column width is set at startup from the config (15 to 24 columns). Text that does not fit is cut: first the name from the right, then the name is dropped, and the IP is cut from the left (keeping the IPv6 interface ID). With `--log-format text` (default), the log file gets the same format, but the address is never cut there. With `--no-stdout`, nothing goes to the console; results go only to the file.

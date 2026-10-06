@@ -209,7 +209,7 @@ defmodule NexPinger.ConsoleSubscriber do
   defp mac_label(%Host{mac_address: nil}), do: String.duplicate(" ", 18)
   defp mac_label(%Host{mac_address: mac}), do: mac <> " "
 
-  defp status_tag(:ok), do: IO.ANSI.green() <> "OK " <> IO.ANSI.reset()
+  defp status_tag(:ok), do: IO.ANSI.green() <> "ok " <> IO.ANSI.reset()
   defp status_tag(:ng), do: IO.ANSI.red() <> "NG " <> IO.ANSI.reset()
 
   defp timestamp, do: Timestamp.now()

@@ -37,8 +37,8 @@ defmodule NexPinger.StatisticsViewTest do
     statistics = Statistics.record(statistics, host, item, {:ok, 1.2})
 
     for {width, expected_latest, expected_average} <- [
-          {80, "OK  1.20", "  1.20"},
-          {120, "OK        1.20", "      1.20"}
+          {80, "ok  1.20", "  1.20"},
+          {120, "ok        1.20", "      1.20"}
         ] do
       [row | _] =
         StatisticsView.render(statistics, width, 24, 0)
@@ -51,6 +51,27 @@ defmodule NexPinger.StatisticsViewTest do
       assert Enum.at(columns, 6) == expected_average
       expected_last = if width == 120, do: expected_average <> "   ", else: expected_average
       assert Enum.at(columns, 7) == expected_last
+    end
+  end
+
+  test "renders a failed latest result as red NG without changing the row width" do
+    host = %Host{name: "web", address: "192.0.2.1", items: []}
+    item = %Item{name: "https", type: :tcp, port: 443}
+    statistics = Statistics.new([%{host | items: [item]}], 1000)
+    statistics = Statistics.record(statistics, host, item, {:error, :timeout})
+
+    for {width, latest_width} <- [{80, 8}, {120, 14}] do
+      [row | _] =
+        StatisticsView.render(statistics, width, 24, 0)
+        |> String.split("\r\n", trim: true)
+        |> Enum.drop(3)
+
+      red_ng = IO.ANSI.red() <> "NG" <> IO.ANSI.reset()
+
+      assert Enum.at(String.split(row, " | "), 4) ==
+               red_ng <> String.duplicate(" ", latest_width - 2)
+
+      assert String.length(String.replace(row, red_ng, "NG")) == width
     end
   end
 end
