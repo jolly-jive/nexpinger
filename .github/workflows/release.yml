@@ -1,4 +1,4 @@
-# Builds the escript and the Windows Burrito binary on a version tag push,
+# Builds the escript and the Burrito binaries (Windows, Linux) on a version tag push,
 # then attaches them to a draft GitHub Release.
 name: Release
 
@@ -47,14 +47,16 @@ jobs:
           path: nexpinger
           if-no-files-found: error
 
-  windows:
+  # All Burrito binaries are cross-built here: Windows, Linux x86_64 and Linux aarch64
+  burrito:
     runs-on: ubuntu-latest
     env:
       MIX_ENV: prod
     steps:
       - uses: actions/checkout@v7
 
-      # Burrito bundles this ERTS. OTP 27 on Windows breaks raw key input and BEL output.
+      # Burrito bundles this ERTS version (Linux: its own musl build of it).
+      # OTP 27 on Windows breaks raw key input and BEL output.
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "29"
@@ -74,23 +76,58 @@ jobs:
         env:
           MIX_ENV: test
 
-      # The Linux target is not released yet
+      # No BURRITO_TARGET: builds every target
       - run: mix release
+
+      # Keys and signals on a pseudo terminal, against the x86_64 binary
+      - run: mix test --only burrito
         env:
-          BURRITO_TARGET: windows
+          MIX_ENV: test
 
       - run: |
           mkdir dist
           cp burrito_out/nexpinger_windows.exe dist/nexpinger.exe
+          cp burrito_out/nexpinger_linux_x86_64 dist/nexpinger-linux-x86_64
+          cp burrito_out/nexpinger_linux_aarch64 dist/nexpinger-linux-aarch64
 
       - uses: actions/upload-artifact@v7
         with:
-          name: windows
-          path: dist/nexpinger.exe
+          name: burrito
+          path: dist/*
           if-no-files-found: error
 
+  # The aarch64 binary can't run on the build machine, so test it on an ARM runner
+  burrito-aarch64:
+    needs: burrito
+    runs-on: ubuntu-24.04-arm
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29"
+          elixir-version: "1.20"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: burrito
+          path: dist
+
+      # Artifacts lose the executable bit
+      - run: |
+          mkdir burrito_out
+          cp dist/nexpinger-linux-aarch64 burrito_out/nexpinger_linux_aarch64
+          chmod +x burrito_out/nexpinger_linux_aarch64
+
+      - run: burrito_out/nexpinger_linux_aarch64 --version
+
+      - run: mix deps.get
+      - run: mix test --only burrito
+
   release:
-    needs: [escript, windows]
+    needs: [escript, burrito, burrito-aarch64]
     runs-on: ubuntu-latest
     permissions:
       contents: write

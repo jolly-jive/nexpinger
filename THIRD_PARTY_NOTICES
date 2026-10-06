@@ -2,16 +2,19 @@ NexPinger - third-party notices
 
 The NexPinger release binaries include the third-party software below.
 
-  nexpinger      (escript)      : sections 1-3
-  nexpinger.exe  (Windows)      : sections 1-7
+  nexpinger                (escript)        : sections 1-3
+  nexpinger.exe            (Windows)        : sections 1-7
+  nexpinger-linux-x86_64   (Linux)          : sections 1-6 (not 4.1), 8, 9
+  nexpinger-linux-aarch64  (Linux)          : sections 1-6 (not 4.1), 8, 9
 
 The escript runs on the user's own Erlang/OTP, which is not included.
+nexpinger.exe and the Linux binaries are made with Burrito ("Burrito binaries").
 This file covers the versions bundled with each release. Review it when
 dependencies, the OTP / Elixir / Zig versions in CI, or Burrito change.
 The full text of the Apache License 2.0 is in the LICENSE file.
 
 ================================================================================
-1. Elixir (elixir, eex, logger; iex in nexpinger.exe only)
+1. Elixir (elixir, eex, logger; iex in the Burrito binaries only)
 ================================================================================
 
 https://github.com/elixir-lang/elixir
@@ -152,11 +155,13 @@ License: Apache-2.0 (see LICENSE)
 Copyright Ericsson AB. All Rights Reserved.
 
 The runtime system (ERTS) includes 4.1-4.5, and stdlib includes 4.6.
+The Linux binaries bundle the ERTS that the Burrito project builds against
+musl libc. It has no JIT, so 4.1 does not apply to them; it adds 8 and 9.
 Erlang/OTP publishes a full source SBOM (bom.spdx.json) with each release:
 https://github.com/erlang/otp/releases
 
 ================================================================================
-4.1 AsmJit (in ERTS)
+4.1 AsmJit (in ERTS; nexpinger.exe only)
 ================================================================================
 
 https://github.com/asmjit/asmjit
@@ -442,7 +447,7 @@ dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
 
 ================================================================================
-5. Burrito (launcher of nexpinger.exe)
+5. Burrito (launcher of the Burrito binaries)
 ================================================================================
 
 https://github.com/burrito-elixir/burrito
@@ -503,7 +508,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ================================================================================
-7. mingw-w64 runtime (in the launcher and icmp_helper.exe)
+7. mingw-w64 runtime (in the launcher and icmp_helper.exe; nexpinger.exe only)
 ================================================================================
 
 https://www.mingw-w64.org/
@@ -552,3 +557,52 @@ OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
 LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+8. musl libc (in the launcher, and as the C library of ERTS; Linux binaries only)
+================================================================================
+
+https://musl.libc.org/
+License: MIT
+
+The launcher carries the musl runtime (version 1.2.5) and unpacks it to /tmp
+for the bundled ERTS. Parts of musl come from other projects under BSD, ISC
+or public-domain terms; see the COPYRIGHT file in the musl source.
+
+musl as a whole is licensed under the following standard MIT license:
+
+Copyright © 2005-2020 Rich Felker, et al.
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+================================================================================
+9. GCC runtime library (libgcc, in ERTS; Linux binaries only)
+================================================================================
+
+https://gcc.gnu.org/
+License: GPL-3.0-or-later WITH GCC-exception-3.1
+
+Copyright (C) Free Software Foundation, Inc.
+
+The compiler (GCC 14.2.0) links small helper routines of libgcc into the
+ERTS programs. The GCC Runtime Library Exception 3.1 permits distributing
+them in such programs under terms of your choice, so the GPL does not
+extend to the binaries.
+https://www.gnu.org/licenses/gcc-exception-3.1.html

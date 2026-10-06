@@ -35,6 +35,7 @@
 
 - `nexpinger`: escript。Erlang/OTP 27 以降が必要。escript には `icmp_helper.exe` を同梱できないため、Windows では ICMP に `ping.exe` を使う。Windows では `nexpinger.exe` を推奨（[既知の問題](#既知の問題)を参照）
 - `nexpinger.exe`: Windows 用の単体実行ファイル（Burrito）。Erlang は不要だが、Microsoft Visual C++ ランタイムが必要。初回起動時に `%APPDATA%\.burrito` 配下へ展開される
+- `nexpinger-linux-x86_64` / `nexpinger-linux-aarch64`: Linux 用の単体実行ファイル（Burrito）。Erlang は不要で、システムの glibc にも依存しない。ダウンロード後に `chmod +x` が必要。初回起動時に `~/.local/share/.burrito` 配下へ展開され、C ライブラリ（musl）を `/tmp` に置く
 
 ## セットアップ
 

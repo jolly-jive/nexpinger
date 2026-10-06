@@ -35,6 +35,7 @@ Prebuilt binaries are on [GitHub Releases](https://github.com/jolly-jive/nexping
 
 - `nexpinger`: escript. Needs Erlang/OTP 27 or later. On Windows, ICMP uses `ping.exe` because an escript can't bundle `icmp_helper.exe`. On Windows, use `nexpinger.exe` instead (see [Known issues](#known-issues))
 - `nexpinger.exe`: single Windows executable (Burrito). No Erlang needed, but needs the Microsoft Visual C++ runtime. On first run, it unpacks itself under `%APPDATA%\.burrito`
+- `nexpinger-linux-x86_64` / `nexpinger-linux-aarch64`: single Linux executables (Burrito). No Erlang needed, and no dependency on the system's glibc. Run `chmod +x` after the download. On first run, it unpacks itself under `~/.local/share/.burrito`, and puts its C library (musl) in `/tmp`
 
 ## Setup
 
