@@ -1,10 +1,12 @@
 defmodule NexPinger.Burrito.LinuxBinaryTest do
   @moduledoc """
   Runs the Linux Burrito binary on a pseudo terminal (`script`) and sends it keys and signals.
-  Excluded by default. Build the binary first, then:
+  Excluded by default. Build the binary for this machine's CPU first, then:
 
-      MIX_ENV=prod BURRITO_TARGET=linux mix release --overwrite
+      MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release --overwrite
       mix test --only burrito
+
+  On aarch64, the binary is `burrito_out/nexpinger_linux_aarch64`.
   """
 
   use ExUnit.Case, async: false
@@ -12,12 +14,20 @@ defmodule NexPinger.Burrito.LinuxBinaryTest do
   @moduletag :burrito
   @moduletag timeout: 60_000
 
-  @binary Path.expand("burrito_out/nexpinger_linux")
   @leave_stats_screen "\e[?25h\e[?1049l"
+
+  # The kernel cuts process names (/proc/PID/comm) to 15 bytes
+  @launcher_comm "nexpinger_linux"
+
+  # The binary for this machine's CPU, e.g. burrito_out/nexpinger_linux_x86_64
+  defp binary do
+    [cpu | _] = :erlang.system_info(:system_architecture) |> to_string() |> String.split("-")
+    Path.expand("burrito_out/nexpinger_linux_#{cpu}")
+  end
 
   setup_all do
     unless :os.type() == {:unix, :linux}, do: flunk("Linux only")
-    unless File.exists?(@binary), do: flunk("#{@binary} not found; build it first")
+    unless File.exists?(binary()), do: flunk("#{binary()} not found; build it first")
     unless System.find_executable("script"), do: flunk("script (util-linux) not found")
 
     dir =
@@ -131,7 +141,7 @@ defmodule NexPinger.Burrito.LinuxBinaryTest do
         [
           "tty > #{tty_file}",
           "stty cols 130 rows 40",
-          Enum.join([@binary | options] ++ [context.config], " "),
+          Enum.join([binary() | options] ++ [context.config], " "),
           "echo EXIT=$?",
           "stty -a",
           "echo STTY_END",
@@ -195,7 +205,7 @@ defmodule NexPinger.Burrito.LinuxBinaryTest do
   defp pids(context) do
     case System.cmd("pgrep", ["-f", context.config]) do
       {output, 0} ->
-        output |> String.split() |> Enum.filter(&(comm(&1) in ["nexpinger_linux", "beam.smp"]))
+        output |> String.split() |> Enum.filter(&(comm(&1) in [@launcher_comm, "beam.smp"]))
 
       {_output, _status} ->
         []
@@ -207,7 +217,7 @@ defmodule NexPinger.Burrito.LinuxBinaryTest do
     pids = pids(context)
 
     %{
-      launcher: Enum.find(pids, &(comm(&1) == "nexpinger_linux")),
+      launcher: Enum.find(pids, &(comm(&1) == @launcher_comm)),
       beam: Enum.find(pids, &(comm(&1) == "beam.smp"))
     }
   end

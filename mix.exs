@@ -155,7 +155,8 @@ defmodule NexPinger.MixProject do
         burrito: [
           targets: [
             windows: [os: :windows, cpu: :x86_64],
-            linux: [os: :linux, cpu: :x86_64]
+            linux_x86_64: [os: :linux, cpu: :x86_64],
+            linux_aarch64: [os: :linux, cpu: :aarch64]
           ],
           extra_steps: [patch: [post: [NexPinger.BurritoPrune, NexPinger.BurritoBreak]]]
         ]

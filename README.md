@@ -92,14 +92,15 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=windows
 .\burrito_out\nexpinger_windows.exe config\hosts.yml
 ```
 
-For Linux (x86_64), use `BURRITO_TARGET=linux`. Without `BURRITO_TARGET`, all targets are built.
+For Linux, use `BURRITO_TARGET=linux_x86_64` or `BURRITO_TARGET=linux_aarch64`.
+Without `BURRITO_TARGET`, all targets are built.
 The Linux binary bundles a musl-based ERTS, so it doesn't depend on the system's glibc.
 On first run, it unpacks itself under `~/.local/share/.burrito`.
 
 ```bash
-ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux mix release
-./burrito_out/nexpinger_linux --help
-./burrito_out/nexpinger_linux config/hosts.yml
+ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release
+./burrito_out/nexpinger_linux_x86_64 --help
+./burrito_out/nexpinger_linux_x86_64 config/hosts.yml
 ```
 
 ## CLI options
