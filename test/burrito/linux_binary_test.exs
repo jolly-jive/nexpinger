@@ -62,7 +62,7 @@ defmodule NexPinger.Burrito.LinuxBinaryTest do
   test "Tab shows the stats screen and Q quits", context do
     port = start(context)
 
-    output = await(port, "", " TCP ")
+    output = await(port, "", " 9/tcp ")
     Port.command(port, "\t")
     output = await(port, output, "Ping Statistics")
     # 130 columns: the 120-column layout, so the terminal size was read
@@ -80,7 +80,7 @@ defmodule NexPinger.Burrito.LinuxBinaryTest do
   test "stops the BEAM when only the launcher gets SIGTERM", context do
     port = start(context)
 
-    output = await(port, "", " TCP ")
+    output = await(port, "", " 9/tcp ")
     Port.command(port, "\t")
     output = await(port, output, "Ping Statistics")
 
@@ -99,7 +99,7 @@ defmodule NexPinger.Burrito.LinuxBinaryTest do
   test "stops quietly when the launcher and the BEAM get SIGTERM", context do
     port = start(context)
 
-    output = await(port, "", " TCP ")
+    output = await(port, "", " 9/tcp ")
     Port.command(port, "\t")
     output = await(port, output, "Ping Statistics")
 
