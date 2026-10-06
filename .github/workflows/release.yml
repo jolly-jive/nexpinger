@@ -57,10 +57,14 @@ jobs:
 
       # Burrito bundles this ERTS version (Linux: its own musl build of it).
       # OTP 27 on Windows breaks raw key input and BEL output.
+      # Exact version: Burrito's Linux ERTS builds lag behind OTP releases, and the
+      # build fails without one. Before raising it, check that both exist:
+      # https://beam-machine-universal.b-cdn.net/OTP-<VSN>/linux/<x86_64|aarch64>/any/otp_<VSN>_linux_any_<x86_64|aarch64>.tar.gz
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "29"
-          elixir-version: "1.20"
+          otp-version: "29.1"
+          elixir-version: "1.20.0"
+          version-type: strict
 
       # Burrito 1.6 requires exactly this Zig version
       - uses: mlugg/setup-zig@v2
