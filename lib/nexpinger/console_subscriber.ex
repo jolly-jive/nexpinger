@@ -5,7 +5,7 @@ defmodule NexPinger.ConsoleSubscriber do
 
   use GenServer
 
-  alias NexPinger.{AddressLabel, Host, Item, Statistics, StatisticsView, Timestamp}
+  alias NexPinger.{Host, Item, ResultLine, Statistics, StatisticsView, Timestamp}
 
   @default_stats_window 1000
   @default_stats_width 80
@@ -44,7 +44,7 @@ defmodule NexPinger.ConsoleSubscriber do
        statistics: Statistics.new([], @default_stats_window),
        stats_width: @default_stats_width,
        stats_height: @default_stats_height,
-       address_width: AddressLabel.min_width(),
+       widths: ResultLine.widths([]),
        mode: :results,
        offset: 0,
        stats_dirty: false,
@@ -62,7 +62,7 @@ defmodule NexPinger.ConsoleSubscriber do
        | statistics: statistics,
          stats_width: stats_width,
          stats_height: stats_height,
-         address_width: AddressLabel.width(hosts)
+         widths: ResultLine.widths(hosts)
      }}
   end
 
@@ -107,7 +107,7 @@ defmodule NexPinger.ConsoleSubscriber do
       if state.mode == :stats do
         schedule_stats_render(state)
       else
-        print_result(host, item, {:ok, rtt_ms}, state.address_width)
+        print_result(host, item, {:ok, rtt_ms}, state.widths)
         state
       end
 
@@ -123,7 +123,7 @@ defmodule NexPinger.ConsoleSubscriber do
       if state.mode == :stats do
         schedule_stats_render(state)
       else
-        print_result(host, item, {:error, reason}, state.address_width)
+        print_result(host, item, {:error, reason}, state.widths)
         state
       end
 
@@ -151,28 +151,8 @@ defmodule NexPinger.ConsoleSubscriber do
   end
 
   # Some terminals (Windows) don't map "\n" to "\r\n" in raw mode, so write "\r\n".
-  defp print_result(host, item, {:ok, rtt_ms}, address_width) do
-    IO.write([
-      timestamp(),
-      " | ",
-      format_label(host, item, address_width),
-      status_tag(:ok),
-      " ",
-      :io_lib.format("~7.2f ms", [rtt_ms]),
-      "\r\n"
-    ])
-  end
-
-  defp print_result(host, item, {:error, reason}, address_width) do
-    IO.write([
-      timestamp(),
-      " | ",
-      format_label(host, item, address_width),
-      status_tag(:ng),
-      " ",
-      reason,
-      "\r\n"
-    ])
+  defp print_result(host, item, result, widths) do
+    IO.write([ResultLine.format(Timestamp.now(), host, item, result, widths, :console), "\r\n"])
   end
 
   # Clearing first causes flicker. Instead: cursor to top-left, overwrite,
@@ -186,31 +166,4 @@ defmodule NexPinger.ConsoleSubscriber do
     IO.write(["\e[H", frame, "\e[J"])
     %{state | stats_dirty: false}
   end
-
-  defp format_label(
-         %Host{name: name} = host,
-         %Item{name: item_name, type: type, port: port},
-         address_width
-       ) do
-    type_str = type |> Atom.to_string() |> String.upcase() |> String.pad_trailing(4)
-    item_label = if port, do: "#{item_name}:#{port}", else: item_name
-
-    [
-      String.pad_trailing("#{name}/#{item_label}", 24),
-      "(",
-      AddressLabel.fit(host, address_width),
-      ") ",
-      mac_label(host),
-      type_str,
-      " "
-    ]
-  end
-
-  defp mac_label(%Host{mac_address: nil}), do: String.duplicate(" ", 18)
-  defp mac_label(%Host{mac_address: mac}), do: mac <> " "
-
-  defp status_tag(:ok), do: IO.ANSI.green() <> "ok " <> IO.ANSI.reset()
-  defp status_tag(:ng), do: IO.ANSI.red() <> "NG " <> IO.ANSI.reset()
-
-  defp timestamp, do: Timestamp.now()
 end

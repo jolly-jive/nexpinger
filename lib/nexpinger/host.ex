@@ -1,7 +1,7 @@
 defmodule NexPinger.Host do
   @moduledoc """
   A monitored host and its items.
-  `ip` and `resolved` (its text form) are set once at startup.
+  `ip`, `resolved` (its text form) and `on_link` are set once at startup.
   `mac_address` is set per probe.
   """
 
@@ -14,6 +14,7 @@ defmodule NexPinger.Host do
             items: [],
             ip: nil,
             resolved: nil,
+            on_link: false,
             mac_address: nil
 
   @type t :: %__MODULE__{
@@ -23,6 +24,7 @@ defmodule NexPinger.Host do
           items: [Item.t()],
           ip: :inet.ip_address() | nil,
           resolved: String.t() | nil,
+          on_link: boolean(),
           mac_address: String.t() | nil
         }
 end

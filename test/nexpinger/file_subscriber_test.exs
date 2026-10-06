@@ -4,6 +4,7 @@ defmodule NexPinger.FileSubscriberTest do
   alias NexPinger.{FileSubscriber, Host, Item}
 
   @timestamp "2026-09-30 12:00:00.123"
+  @widths %{ip: 0, item: 0, port: 0}
 
   defp tcp_host,
     do: %Host{
@@ -25,25 +26,24 @@ defmodule NexPinger.FileSubscriberTest do
   end
 
   describe "text format" do
-    test "keeps the fixed-width console layout" do
+    test "uses the console layout, with the MAC address" do
       assert record(:text, tcp_host(), tcp_item(), {:ok, 45.671}) ==
-               "2026-09-30 12:00:00.123 | web/https:443           (192.0.2.10     ) " <>
-                 "00:00:5e:00:53:01 TCP  ok    45.67 ms\n"
+               "2026-09-30 12:00:00.123 192.0.2.10 00:00:5e:00:53:01 https 443/tcp ok    45.67 ms  web\n"
 
-      assert record(:text, icmp_host(), icmp_item(), {:error, "timeout"}) =~
-               ~r/ICMP NG  timeout\n$/
+      assert record(:text, icmp_host(), icmp_item(), {:error, "timeout"}) ==
+               "2026-09-30 12:00:00.123 192.0.2.1 -                 ping icmp NG timeout      gateway\n"
     end
 
-    test "never cuts a name or its resolved IP" do
-      host = %Host{
-        name: "web",
-        address: "www.example.com",
-        resolved: "2001:db8:1:2:a1b2:c3ff:fed4:e5f6",
-        items: []
-      }
+    test "pads the columns to the given widths" do
+      widths = %{ip: 12, item: 5, port: 7}
 
-      assert record(:text, host, icmp_item(), {:ok, 1.0}) =~
-               "(www.example.com=2001:db8:1:2:a1b2:c3ff:fed4:e5f6) "
+      line =
+        :text
+        |> FileSubscriber.format_record(@timestamp, icmp_host(), icmp_item(), {:ok, 1.0}, widths)
+        |> IO.iodata_to_binary()
+
+      assert line ==
+               "2026-09-30 12:00:00.123 192.0.2.1    -                 ping  icmp    ok     1.00 ms  gateway\n"
     end
   end
 
@@ -106,9 +106,9 @@ defmodule NexPinger.FileSubscriberTest do
     test "writes a TSV header only to an empty file", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "monitor.tsv")
 
-      {:ok, state} = FileSubscriber.init({path, :tsv, nil})
+      {:ok, state} = FileSubscriber.init({path, :tsv, nil, @widths})
       FileSubscriber.handle_info({:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}, state)
-      {:ok, _state} = FileSubscriber.init({path, :tsv, nil})
+      {:ok, _state} = FileSubscriber.init({path, :tsv, nil, @widths})
 
       [header | rows] = path |> File.read!() |> String.split("\n", trim: true)
 
@@ -122,7 +122,7 @@ defmodule NexPinger.FileSubscriberTest do
     test "does not write a header for text or jsonl", %{tmp_dir: tmp_dir} do
       for format <- [:text, :jsonl] do
         path = Path.join(tmp_dir, "monitor.#{format}")
-        {:ok, _state} = FileSubscriber.init({path, format, nil})
+        {:ok, _state} = FileSubscriber.init({path, format, nil, @widths})
         assert File.read!(path) == ""
       end
     end

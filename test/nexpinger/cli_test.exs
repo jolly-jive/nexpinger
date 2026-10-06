@@ -127,6 +127,16 @@ defmodule NexPinger.CLITest do
                "(also 203.0.113.11, 203.0.113.12)"
   end
 
+  test "tells the resolved IP of host names only" do
+    hosts = [
+      %NexPinger.Host{name: "web", address: "www.example.com", resolved: "203.0.113.10", items: []},
+      %NexPinger.Host{name: "gateway", address: "192.0.2.1", resolved: "192.0.2.1", items: []}
+    ]
+
+    assert NexPinger.CLI.resolved_messages(hosts) ==
+             ["Resolved: web: www.example.com -> 203.0.113.10"]
+  end
+
   test "parses the version flag" do
     assert {[version: true], [], []} = NexPinger.CLI.parse_options(["--version"])
   end

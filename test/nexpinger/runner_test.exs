@@ -140,7 +140,7 @@ defmodule NexPinger.RunnerTest do
     assert_receive {:file_written, ^no_mac_path}
     {:ok, mac_line} = File.read(mac_path)
     {:ok, no_mac_line} = File.read(no_mac_path)
-    assert mac_line =~ ") 00:00:5e:00:53:01 ICMP"
-    assert no_mac_line =~ ")                   ICMP"
+    assert mac_line =~ " 00:00:5e:00:53:01 icmp icmp ok"
+    assert no_mac_line =~ " -                 icmp icmp ok"
   end
 end

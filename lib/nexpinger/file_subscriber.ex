@@ -2,13 +2,13 @@ defmodule NexPinger.FileSubscriber do
   @moduledoc """
   Subscriber that writes results from the Broadcaster to a file.
 
-  Formats: `:text` (the screen's layout, but the address is never cut), `:tsv` (tab-separated raw data),
+  Formats: `:text` (the screen's layout, with the MAC address), `:tsv` (tab-separated raw data),
   `:jsonl` (one JSON record per line).
   """
 
   use GenServer
 
-  alias NexPinger.{AddressLabel, Host, Item, Timestamp}
+  alias NexPinger.{Host, Item, ResultLine, Timestamp}
 
   @type format :: :text | :tsv | :jsonl
 
@@ -19,13 +19,19 @@ defmodule NexPinger.FileSubscriber do
   @spec formats() :: [format()]
   def formats, do: @formats
 
-  def start_link(path \\ "monitor.log", name \\ __MODULE__, owner \\ nil, format \\ :text)
+  def start_link(
+        path \\ "monitor.log",
+        name \\ __MODULE__,
+        owner \\ nil,
+        format \\ :text,
+        widths \\ ResultLine.widths([])
+      )
       when format in @formats do
-    GenServer.start_link(__MODULE__, {path, format, owner}, name: name)
+    GenServer.start_link(__MODULE__, {path, format, owner, widths}, name: name)
   end
 
   @impl true
-  def init({path, format, owner}) do
+  def init({path, format, owner, widths}) do
     File.mkdir_p!(Path.dirname(path))
     File.touch!(path)
 
@@ -34,15 +40,15 @@ defmodule NexPinger.FileSubscriber do
       append_line(path, tsv_header())
     end
 
-    {:ok, %{path: path, format: format, owner: owner}}
+    {:ok, %{path: path, format: format, owner: owner, widths: widths}}
   end
 
   @impl true
   def handle_info(
         {:item_result, %Host{} = host, %Item{} = item, result},
-        %{path: path, format: format, owner: owner} = state
+        %{path: path, format: format, owner: owner, widths: widths} = state
       ) do
-    append_line(path, format_record(format, Timestamp.now(), host, item, result))
+    append_line(path, format_record(format, Timestamp.now(), host, item, result, widths))
     notify_owner(owner, {:file_written, path})
     {:noreply, state}
   end
@@ -55,34 +61,17 @@ defmodule NexPinger.FileSubscriber do
           String.t(),
           Host.t(),
           Item.t(),
-          {:ok, number()} | {:error, term()}
+          {:ok, number()} | {:error, term()},
+          ResultLine.widths()
         ) ::
           iodata()
-  def format_record(:text, timestamp, host, item, {:ok, rtt_ms}) do
-    [
-      timestamp,
-      " | ",
-      format_label(host, item),
-      status_tag(:ok),
-      " ",
-      :io_lib.format("~7.2f ms", [rtt_ms]),
-      "\n"
-    ]
+  def format_record(format, timestamp, host, item, result, widths \\ ResultLine.widths([]))
+
+  def format_record(:text, timestamp, host, item, result, widths) do
+    [ResultLine.format(timestamp, host, item, result, widths, :file), "\n"]
   end
 
-  def format_record(:text, timestamp, host, item, {:error, reason}) do
-    [
-      timestamp,
-      " | ",
-      format_label(host, item),
-      status_tag(:ng),
-      " ",
-      reason_string(reason),
-      "\n"
-    ]
-  end
-
-  def format_record(:tsv, timestamp, host, item, result) do
+  def format_record(:tsv, timestamp, host, item, result, _widths) do
     values =
       Enum.map(record_values(timestamp, host, item, result), fn
         nil -> ""
@@ -92,7 +81,7 @@ defmodule NexPinger.FileSubscriber do
     [Enum.join(values, "\t"), "\n"]
   end
 
-  def format_record(:jsonl, timestamp, host, item, result) do
+  def format_record(:jsonl, timestamp, host, item, result, _widths) do
     # Build the object by hand to keep key order; JSON encodes values only
     pairs =
       @fields
@@ -141,26 +130,4 @@ defmodule NexPinger.FileSubscriber do
 
   defp notify_owner(nil, _message), do: :ok
   defp notify_owner(owner, message), do: send(owner, message)
-
-  # The address is never cut in files
-  defp format_label(%Host{name: name} = host, %Item{name: item_name, type: type, port: port}) do
-    type_str = type |> Atom.to_string() |> String.upcase() |> String.pad_trailing(4)
-    item_label = if port, do: "#{item_name}:#{port}", else: item_name
-
-    [
-      String.pad_trailing("#{name}/#{item_label}", 24),
-      "(",
-      String.pad_trailing(AddressLabel.full(host), AddressLabel.min_width()),
-      ") ",
-      mac_label(host),
-      type_str,
-      " "
-    ]
-  end
-
-  defp mac_label(%Host{mac_address: nil}), do: String.duplicate(" ", 18)
-  defp mac_label(%Host{mac_address: mac}), do: mac <> " "
-
-  defp status_tag(:ok), do: "ok "
-  defp status_tag(:ng), do: "NG "
 end

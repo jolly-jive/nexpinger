@@ -8,8 +8,10 @@ defmodule NexPinger.CLI do
     Config,
     ConsoleSubscriber,
     FileSubscriber,
+    OnLink,
     Prober,
     Resolver,
+    ResultLine,
     Runner,
     TerminalInput,
     UdpProbe
@@ -139,6 +141,9 @@ defmodule NexPinger.CLI do
               System.halt(1)
           end
 
+        networks = OnLink.networks()
+        hosts = Enum.map(hosts, &%{&1 | on_link: OnLink.on_link?(&1.ip, networks)})
+
         item_count = Enum.sum(Enum.map(hosts, &length(&1.items)))
         stats_width = requested_stats_width || TerminalInput.terminal_width()
         stats_height = TerminalInput.terminal_height()
@@ -160,12 +165,14 @@ defmodule NexPinger.CLI do
           IO.puts("ICMP: #{Prober.icmp_method()}")
         end
 
+        Enum.each(resolved_messages(hosts), &IO.puts/1)
+
         Enum.each(address_warnings ++ ntp_warnings(hosts), &IO.puts(:stderr, &1))
 
         IO.puts(String.duplicate("-", 60))
 
         if log_file do
-          start_log_file_subscriber(log_file, log_format)
+          start_log_file_subscriber(log_file, log_format, ResultLine.widths(hosts))
         end
 
         if stdout_enabled do
@@ -238,6 +245,16 @@ defmodule NexPinger.CLI do
   end
 
   @doc """
+  Tells which IP each host name was resolved to. Result lines show the IP only.
+  """
+  @spec resolved_messages([NexPinger.Host.t()]) :: [String.t()]
+  def resolved_messages(hosts) do
+    for host <- hosts, Resolver.literal_family(host.address) == nil do
+      "Resolved: #{host.name}: #{host.address} -> #{host.resolved}"
+    end
+  end
+
+  @doc """
   Warns about NTP items polled faster than NTP servers usually allow.
   """
   @spec ntp_warnings([NexPinger.Host.t()]) :: [String.t()]
@@ -288,10 +305,10 @@ defmodule NexPinger.CLI do
     end
   end
 
-  defp start_log_file_subscriber(log_file, log_format) do
+  defp start_log_file_subscriber(log_file, log_format, widths) do
     case Process.whereis(:log_file_subscriber) do
       nil ->
-        FileSubscriber.start_link(log_file, :log_file_subscriber, nil, log_format)
+        FileSubscriber.start_link(log_file, :log_file_subscriber, nil, log_format, widths)
         NexPinger.Broadcaster.subscribe(:log_file_subscriber)
 
       _pid ->

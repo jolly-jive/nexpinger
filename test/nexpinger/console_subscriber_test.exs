@@ -32,24 +32,56 @@ defmodule NexPinger.ConsoleSubscriberTest do
     assert output =~ "1.23 ms"
   end
 
-  test "fits the address to the width set from the hosts" do
-    host = %Host{
+  test "pads the columns to the widths set from the hosts" do
+    ping = %Item{name: "ping", type: :icmp}
+    https = %Item{name: "https", type: :tcp, port: 443}
+
+    web = %Host{
       name: "web",
       address: "www.example.com",
       resolved: "203.0.113.10",
-      items: []
+      items: [ping, https]
     }
 
+    gateway = %Host{
+      name: "gateway",
+      address: "192.0.2.1",
+      resolved: "192.0.2.1",
+      on_link: true,
+      items: [ping]
+    }
+
+    {:ok, state} = ConsoleSubscriber.init([])
+
+    {:reply, :ok, state} =
+      ConsoleSubscriber.handle_call({:configure, [web, gateway], 1000, 80, 24}, self(), state)
+
+    output =
+      capture_io(fn ->
+        ConsoleSubscriber.handle_info({:item_result, web, https, {:ok, 1.23}}, state)
+        ConsoleSubscriber.handle_info({:item_result, gateway, ping, {:error, "timeout"}}, state)
+      end)
+
+    ok = IO.ANSI.green() <> "ok" <> IO.ANSI.reset()
+    ng = IO.ANSI.red() <> "NG" <> IO.ANSI.reset()
+
+    assert output =~ " 203.0.113.10 -      https 443/tcp #{ok}     1.23 ms  web\r\n"
+    assert output =~ " 192.0.2.1    no-mac ping  icmp    #{ng} timeout      gateway\r\n"
+    refute output =~ "www.example.com"
+  end
+
+  test "shows mac when the MAC address is found" do
+    host = %Host{name: "gateway", address: "192.0.2.1", mac_address: "00:00:5e:00:53:01", items: []}
     item = %Item{name: "ping", type: :icmp}
     {:ok, state} = ConsoleSubscriber.init([])
-    {:reply, :ok, state} = ConsoleSubscriber.handle_call({:configure, [host], 1000, 80, 24}, self(), state)
 
     output =
       capture_io(fn ->
         ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
       end)
 
-    assert output =~ "(www.examp..=203.0.113.10) "
+    assert output =~ " 192.0.2.1 mac    ping icmp "
+    refute output =~ "00:00:5e:00:53:01"
   end
 
   test "hides the cursor while the statistics view is shown" do

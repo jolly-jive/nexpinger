@@ -217,13 +217,27 @@ A UDP check sends a request that makes the service reply, and **only checks whet
 ## Sample output
 
 ```
-2026-09-16 12:00:00.123 | gateway/ping            (192.168.1.1             ) 00:00:5e:00:53:01 ICMP ok    1.23 ms
-2026-09-16 12:00:01.456 | web-server/https:443    (example.com=203.0.113.10)                   TCP  ok   45.67 ms
-2026-09-16 12:00:02.789 | dns-server/ping         (192.168.1.10            )                   ICMP NG    timeout
-2026-09-16 12:00:03.012 | dns-server/dns:53       (192.168.1.10            )                   UDP  ok    2.34 ms
+Resolved: web-server: example.com -> 203.0.113.10
+------------------------------------------------------------
+2026-09-16 12:00:00.123 192.168.1.1  mac    ping  icmp    ok     1.23 ms  gateway
+2026-09-16 12:00:01.456 203.0.113.10 -      https 443/tcp ok    45.67 ms  web-server
+2026-09-16 12:00:02.789 192.168.1.10 no-mac ping  icmp    NG timeout      dns-server
+2026-09-16 12:00:03.012 192.168.1.10 mac    dns   53/udp  ok     2.34 ms  dns-server
 ```
 
-Times are local time, on screen and in files. The MAC address is shown only when found in the neighbor table, which holds on-link hosts only; otherwise the same width is left blank. Lookups are cached per IP for 15 s. When `address` is a host name, the resolved IP is shown with it as `name=IP`. The address column width is set at startup from the config (15 to 24 columns). Text that does not fit is cut: first the name from the right, then the name is dropped, and the IP is cut from the left (keeping the IPv6 interface ID). With `--log-format text` (default), the log file gets the same format, but the address is never cut there. With `--no-stdout`, nothing goes to the console; results go only to the file.
+The columns are: time, IP address, MAC, Item name, port/protocol, `ok` / `NG`, RTT or failure reason, host name. Times are local time, on screen and in files. The IP address, Item name and port/protocol columns are as wide as the longest value in the config, so nothing is cut. When `address` is a host name, only the resolved IP is shown; the name and its IP are shown once at startup (`Resolved: ...`).
+
+The MAC column shows whether the MAC address was found in the neighbor table (ARP / NDP):
+
+| Value | Meaning |
+|---|---|
+| `mac` | Found |
+| `no-mac` | The host is on-link (in the subnet of one of this machine's interfaces), but not found |
+| `-` | The host is off-link, or is this machine itself |
+
+The subnets are read from the interfaces once at startup. Lookups are cached per IP for 15 s.
+
+With `--log-format text` (default), the log file gets the same format, but with the MAC address itself in place of `mac`. With `--no-stdout`, nothing goes to the console; results go only to the file.
 
 ### Log file formats
 
