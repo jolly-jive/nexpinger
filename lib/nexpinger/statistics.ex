@@ -38,9 +38,11 @@ defmodule NexPinger.Statistics do
     key = key(host, item)
     existing = Map.get(rows, key, new_row(host, item))
 
+    # The host carries the MAC address of this attempt
     updated = %{
       existing
-      | attempts: existing.attempts + 1,
+      | host: host,
+        attempts: existing.attempts + 1,
         failures: existing.failures + if(match?({:error, _}, result), do: 1, else: 0),
         latest: result,
         recent: Enum.take([result | existing.recent], window)

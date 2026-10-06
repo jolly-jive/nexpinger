@@ -67,10 +67,14 @@ defmodule NexPinger.ResultLine do
   defp ip(%Host{resolved: nil, address: address}), do: address
   defp ip(%Host{resolved: resolved}), do: resolved
 
-  defp mac_label(%Host{mac_address: nil, on_link: true}, _target), do: "no-mac"
-  defp mac_label(%Host{mac_address: nil}, _target), do: "-"
-  defp mac_label(%Host{}, :console), do: "mac"
-  defp mac_label(%Host{mac_address: mac}, :file), do: mac
+  @doc """
+  The MAC column's value.
+  """
+  @spec mac_label(Host.t(), target()) :: String.t()
+  def mac_label(%Host{mac_address: nil, on_link: true}, _target), do: "no-mac"
+  def mac_label(%Host{mac_address: nil}, _target), do: "-"
+  def mac_label(%Host{}, :console), do: "mac"
+  def mac_label(%Host{mac_address: mac}, :file), do: mac
 
   defp port_label(%Item{type: :icmp}), do: "icmp"
   defp port_label(%Item{type: type, port: port}), do: "#{port}/#{type}"

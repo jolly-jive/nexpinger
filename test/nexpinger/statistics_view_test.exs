@@ -36,22 +36,55 @@ defmodule NexPinger.StatisticsViewTest do
     statistics = Statistics.new([%{host | items: [item]}], 1000)
     statistics = Statistics.record(statistics, host, item, {:ok, 1.2})
 
-    for {width, expected_latest, expected_average} <- [
-          {80, "ok  1.20", "  1.20"},
-          {120, "ok        1.20", "      1.20"}
+    for {width, expected} <- [
+          {80,
+           [
+             "Target                 MAC      Runs  Fail  Loss% Latest       Avg    P95    P99",
+             "web/https:443          -           1     0   0.0% ok   1.20   1.20   1.20   1.20"
+           ]},
+          {120,
+           [
+             "Target                                     MAC         Runs      Fail   Loss%  Latest            Avg       P95       P99",
+             "web/https:443                              -              1         0    0.0%  ok     1.20      1.20      1.20      1.20"
+           ]}
         ] do
-      [row | _] =
+      [header, _rule, row | _] =
         StatisticsView.render(statistics, width, 24, 0)
         |> String.split("\r\n", trim: true)
-        |> Enum.drop(3)
+        |> Enum.drop(1)
 
-      columns = String.split(row, " | ")
-      assert Enum.at(columns, 4) == expected_latest
-      assert Enum.at(columns, 5) == expected_average
-      assert Enum.at(columns, 6) == expected_average
-      expected_last = if width == 120, do: expected_average <> "   ", else: expected_average
-      assert Enum.at(columns, 7) == expected_last
+      assert [header, row] == expected
     end
+  end
+
+  test "shows the MAC state of the latest attempt" do
+    item = %Item{name: "ping", type: :icmp}
+    host = %Host{name: "gateway", address: "192.0.2.1", on_link: true, items: [item]}
+    statistics = Statistics.new([host], 1000)
+
+    mac_column = fn statistics ->
+      StatisticsView.render(statistics, 80, 24, 0)
+      |> String.split("\r\n", trim: true)
+      |> Enum.at(3)
+      |> String.slice(23, 6)
+    end
+
+    assert mac_column.(statistics) == "-     "
+
+    statistics = Statistics.record(statistics, host, item, {:error, "timeout"})
+    assert mac_column.(statistics) == "no-mac"
+
+    with_mac = %{host | mac_address: "00:00:5e:00:53:01"}
+    statistics = Statistics.record(statistics, with_mac, item, {:ok, 1.2})
+    assert mac_column.(statistics) == "mac   "
+  end
+
+  test "shows a latest RTT of 100 ms or more in 80 columns" do
+    item = %Item{name: "ping", type: :icmp}
+    host = %Host{name: "far", address: "192.0.2.1", items: [item]}
+    statistics = Statistics.new([host], 1000) |> Statistics.record(host, item, {:ok, 135.43})
+
+    assert StatisticsView.render(statistics, 80, 24, 0) =~ "ok 135.43 135.43"
   end
 
   test "renders a failed latest result as red NG without changing the row width" do
@@ -60,7 +93,7 @@ defmodule NexPinger.StatisticsViewTest do
     statistics = Statistics.new([%{host | items: [item]}], 1000)
     statistics = Statistics.record(statistics, host, item, {:error, :timeout})
 
-    for {width, latest_width} <- [{80, 8}, {120, 14}] do
+    for {width, before_latest} <- [{80, "100.0% "}, {120, "100.0%  "}] do
       [row | _] =
         StatisticsView.render(statistics, width, 24, 0)
         |> String.split("\r\n", trim: true)
@@ -68,9 +101,7 @@ defmodule NexPinger.StatisticsViewTest do
 
       red_ng = IO.ANSI.red() <> "NG" <> IO.ANSI.reset()
 
-      assert Enum.at(String.split(row, " | "), 4) ==
-               red_ng <> String.duplicate(" ", latest_width - 2)
-
+      assert row =~ before_latest <> red_ng <> " "
       assert String.length(String.replace(row, red_ng, "NG")) == width
     end
   end
