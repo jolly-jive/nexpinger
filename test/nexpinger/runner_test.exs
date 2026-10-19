@@ -129,7 +129,9 @@ defmodule NexPinger.RunnerTest do
     path = "/tmp/nexpinger_dual_output.log"
     File.rm(path)
 
-    {:ok, _pid} = NexPinger.FileSubscriber.start_link(path, :test_file_subscriber, self())
+    {:ok, _pid} =
+      NexPinger.FileSubscriber.start_link(path: path, name: :test_file_subscriber, owner: self())
+
     assert :ok = Broadcaster.subscribe(self())
     assert :ok = Broadcaster.subscribe(:test_file_subscriber)
     assert :ok = Broadcaster.publish(host, item, {:ok, 99.99})
@@ -156,8 +158,8 @@ defmodule NexPinger.RunnerTest do
     File.rm(mac_path)
     File.rm(no_mac_path)
 
-    {:ok, mac_pid} = NexPinger.FileSubscriber.start_link(mac_path, nil, self())
-    {:ok, no_mac_pid} = NexPinger.FileSubscriber.start_link(no_mac_path, nil, self())
+    {:ok, mac_pid} = NexPinger.FileSubscriber.start_link(path: mac_path, owner: self())
+    {:ok, no_mac_pid} = NexPinger.FileSubscriber.start_link(path: no_mac_path, owner: self())
     send(mac_pid, {:item_result, with_mac, item, {:ok, 1.23}})
     send(no_mac_pid, {:item_result, without_mac, item, {:ok, 1.23}})
 

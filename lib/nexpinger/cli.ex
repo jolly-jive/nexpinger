@@ -337,24 +337,26 @@ defmodule NexPinger.CLI do
     do: "#{FileSubscriber.file_path(file, rotate, Timestamp.now())} (#{format}, #{rotate})"
 
   defp start_log_file_subscriber(%{file: file, format: format, rotate: rotate}, widths) do
-    case Process.whereis(:log_file_subscriber) do
-      nil ->
-        # Checked here: a failing start_link would take this (linked) process down with it
-        case FileSubscriber.prepare(
-               FileSubscriber.file_path(file, rotate, Timestamp.now()),
-               format
-             ) do
-          :ok ->
-            FileSubscriber.start_link(file, :log_file_subscriber, nil, format, widths, rotate)
-            NexPinger.Broadcaster.subscribe(:log_file_subscriber)
+    # Checked here for a plain message; once started, failures don't stop monitoring
+    case FileSubscriber.prepare(FileSubscriber.file_path(file, rotate, Timestamp.now()), format) do
+      :ok ->
+        spec =
+          {FileSubscriber,
+           path: file,
+           name: :log_file_subscriber,
+           format: format,
+           widths: widths,
+           rotate: rotate,
+           subscribe: true}
 
-          {:error, message} ->
-            IO.puts(:stderr, message)
-            System.halt(1)
+        case DynamicSupervisor.start_child(NexPinger.SubscriberSupervisor, spec) do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
         end
 
-      _pid ->
-        :ok
+      {:error, message} ->
+        IO.puts(:stderr, message)
+        System.halt(1)
     end
   end
 end

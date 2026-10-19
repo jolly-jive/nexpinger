@@ -12,11 +12,14 @@ defmodule NexPinger.FileSubscriber do
   The file is opened for each line, so a log rotation tool can move or delete it: the next line
   creates a new file (with the TSV header). A failed write does not stop monitoring: the result
   is lost, and stderr tells when writes start failing and when they succeed again.
+
+  The CLI starts it under `NexPinger.SubscriberSupervisor` with `subscribe: true`, so a restarted
+  subscriber subscribes to the Broadcaster again.
   """
 
   use GenServer
 
-  alias NexPinger.{Host, Item, ResultLine, Timestamp}
+  alias NexPinger.{Broadcaster, Host, Item, ResultLine, Timestamp}
 
   @type format :: :text | :tsv | :jsonl
   @type rotate :: nil | :daily
@@ -32,16 +35,20 @@ defmodule NexPinger.FileSubscriber do
   @spec rotates() :: [rotate()]
   def rotates, do: @rotates
 
-  def start_link(
-        path \\ "monitor.log",
-        name \\ __MODULE__,
-        owner \\ nil,
-        format \\ :text,
-        widths \\ ResultLine.widths([]),
-        rotate \\ nil
-      )
-      when format in @formats and (rotate == nil or rotate in @rotates) do
-    GenServer.start_link(__MODULE__, {path, format, owner, widths, rotate}, name: name)
+  @doc """
+  Options: `:path` (required), `:name`, `:owner` (gets `{:file_written, path}` and
+  `{:file_write_failed, path, reason}`), `:format` (default `:text`), `:widths`, `:rotate`,
+  `:subscribe` (subscribe to the Broadcaster on start; default false).
+  """
+  def start_link(opts) do
+    format = Keyword.get(opts, :format, :text)
+    rotate = Keyword.get(opts, :rotate)
+
+    unless format in @formats and (rotate == nil or rotate in @rotates) do
+      raise ArgumentError, "invalid format or rotate: #{inspect({format, rotate})}"
+    end
+
+    GenServer.start_link(__MODULE__, opts, Keyword.take(opts, [:name]))
   end
 
   @doc """
@@ -70,21 +77,27 @@ defmodule NexPinger.FileSubscriber do
   end
 
   @impl true
-  def init({path, format, owner, widths, rotate}) do
-    case prepare(file_path(path, rotate, Timestamp.now()), format) do
-      :ok ->
-        {:ok,
-         %{
-           path: path,
-           format: format,
-           owner: owner,
-           widths: widths,
-           rotate: rotate,
-           failed?: false
-         }}
+  def init(opts) do
+    state = %{
+      path: Keyword.fetch!(opts, :path),
+      format: Keyword.get(opts, :format, :text),
+      owner: Keyword.get(opts, :owner),
+      widths: Keyword.get(opts, :widths, ResultLine.widths([])),
+      rotate: Keyword.get(opts, :rotate),
+      failed?: false
+    }
 
-      {:error, message} ->
-        {:stop, message}
+    if Keyword.get(opts, :subscribe, false) do
+      Broadcaster.subscribe(self())
+    end
+
+    # Stopping here would fail a restart, and enough of them stop the supervisor.
+    # The CLI checks the path with prepare/2 before the first start.
+    path = file_path(state.path, state.rotate, Timestamp.now())
+
+    case append_line(path, state.format, []) do
+      :ok -> {:ok, state}
+      {:error, reason} -> {:ok, report_failure(state, path, reason)}
     end
   end
 

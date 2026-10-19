@@ -123,7 +123,16 @@ defmodule NexPinger.FileSubscriberTest do
     test "writes to today's file", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "monitor.tsv")
       before = FileSubscriber.file_path(path, :daily, Timestamp.now())
-      {:ok, state} = FileSubscriber.init({path, :tsv, self(), @widths, :daily})
+
+      {:ok, state} =
+        FileSubscriber.init(
+          path: path,
+          format: :tsv,
+          owner: self(),
+          widths: @widths,
+          rotate: :daily
+        )
+
       FileSubscriber.handle_info({:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}, state)
       after_ = FileSubscriber.file_path(path, :daily, Timestamp.now())
 
@@ -135,15 +144,52 @@ defmodule NexPinger.FileSubscriberTest do
     end
   end
 
+  describe "under a supervisor" do
+    @describetag :tmp_dir
+
+    test "subscribes to the Broadcaster again after a restart", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "monitor.log")
+      supervisor = start_supervised!({DynamicSupervisor, strategy: :one_for_one})
+
+      {:ok, pid} =
+        DynamicSupervisor.start_child(
+          supervisor,
+          {FileSubscriber, path: path, owner: self(), widths: @widths, subscribe: true}
+        )
+
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      wait_for_restart(supervisor, pid)
+      # Let the Broadcaster handle the restarted subscriber's subscribe
+      :sys.get_state(NexPinger.Broadcaster)
+
+      NexPinger.Broadcaster.publish(icmp_host(), icmp_item(), {:ok, 1.5})
+      assert_receive {:file_written, ^path}
+    end
+  end
+
+  defp wait_for_restart(supervisor, old_pid, tries \\ 100) do
+    case DynamicSupervisor.which_children(supervisor) do
+      [{_, pid, _, _}] when is_pid(pid) and pid != old_pid ->
+        pid
+
+      _not_yet when tries > 0 ->
+        Process.sleep(10)
+        wait_for_restart(supervisor, old_pid, tries - 1)
+    end
+  end
+
   describe "file output" do
     @describetag :tmp_dir
 
     test "writes a TSV header only to an empty file", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "monitor.tsv")
 
-      {:ok, state} = FileSubscriber.init({path, :tsv, nil, @widths, nil})
+      {:ok, state} = FileSubscriber.init(path: path, format: :tsv, widths: @widths)
       FileSubscriber.handle_info({:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}, state)
-      {:ok, _state} = FileSubscriber.init({path, :tsv, nil, @widths, nil})
+      {:ok, _state} = FileSubscriber.init(path: path, format: :tsv, widths: @widths)
 
       [header | rows] = path |> File.read!() |> String.split("\n", trim: true)
 
@@ -156,7 +202,7 @@ defmodule NexPinger.FileSubscriberTest do
 
     test "recreates a moved file, with the TSV header", %{tmp_dir: tmp_dir} do
       path = Path.join([tmp_dir, "logs", "monitor.tsv"])
-      {:ok, state} = FileSubscriber.init({path, :tsv, nil, @widths, nil})
+      {:ok, state} = FileSubscriber.init(path: path, format: :tsv, widths: @widths)
       result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}
       FileSubscriber.handle_info(result, state)
 
@@ -172,7 +218,7 @@ defmodule NexPinger.FileSubscriberTest do
     test "does not write a header for text or jsonl", %{tmp_dir: tmp_dir} do
       for format <- [:text, :jsonl] do
         path = Path.join(tmp_dir, "monitor.#{format}")
-        {:ok, _state} = FileSubscriber.init({path, format, nil, @widths, nil})
+        {:ok, _state} = FileSubscriber.init(path: path, format: format, widths: @widths)
         assert File.read!(path) == ""
       end
     end
@@ -184,13 +230,22 @@ defmodule NexPinger.FileSubscriberTest do
 
       assert {:error, message} = FileSubscriber.prepare(path, :text)
       assert message =~ "Cannot open log file: #{path}: "
-      assert {:stop, ^message} = FileSubscriber.init({path, :text, nil, @widths, nil})
+
+      stderr =
+        capture_io(:stderr, fn ->
+          assert {:ok, %{failed?: true}} = FileSubscriber.init(path: path, widths: @widths)
+        end)
+
+      assert stderr =~ "Log file write failed: #{path}: "
     end
 
     test "keeps going when a write fails, reporting only the failure and the recovery",
          %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "monitor.log")
-      {:ok, state} = FileSubscriber.init({path, :text, self(), @widths, nil})
+
+      {:ok, state} =
+        FileSubscriber.init(path: path, format: :text, owner: self(), widths: @widths)
+
       result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}
 
       # A directory in place of the file makes every write fail
