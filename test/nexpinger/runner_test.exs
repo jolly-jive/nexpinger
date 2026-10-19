@@ -92,6 +92,31 @@ defmodule NexPinger.RunnerTest do
     Process.exit(pid, :kill)
   end
 
+  test "publishes an NG result and keeps running when the probe raises" do
+    host = %Host{
+      name: "raising-probe",
+      address: "127.0.0.1",
+      ip: {127, 0, 0, 1},
+      resolved: "127.0.0.1",
+      items: []
+    }
+
+    # No Prober.probe/2 clause matches an unknown type
+    item = %Item{name: "bogus", type: :bogus, interval: 10, timeout: 100}
+
+    Broadcaster.subscribe(self())
+    {:ok, pid} = Runner.start_link({host, item})
+
+    assert_receive {:item_result, %Host{name: "raising-probe"}, ^item, {:error, reason}}, 1000
+    assert reason =~ "no function clause matching"
+    refute reason =~ "\n"
+    assert_receive {:item_result, %Host{name: "raising-probe"}, ^item, {:error, _reason}}, 1000
+    assert Process.alive?(pid)
+
+    Process.unlink(pid)
+    Process.exit(pid, :kill)
+  end
+
   test "publishes to stdout and file subscribers at the same time" do
     host = %Host{
       name: "dual-output",

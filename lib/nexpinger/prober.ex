@@ -71,8 +71,6 @@ defmodule NexPinger.Prober do
       {:error, :unavailable} -> ping_command_probe(address, timeout)
       result -> result
     end
-  rescue
-    e -> {:error, Exception.message(e)}
   end
 
   defp ping_command_probe(address, timeout) do

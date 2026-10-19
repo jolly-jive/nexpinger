@@ -33,12 +33,33 @@ defmodule NexPinger.Runner do
   @impl true
   def handle_info(:probe, %{host: host, item: item} = state) do
     # The IP is fixed at startup; only the MAC is looked up per probe
-    result = Prober.probe(host.ip, item)
-    host = %{host | mac_address: MacResolver.lookup(host.resolved)}
+    result = safe_probe(host.ip, item)
+    host = %{host | mac_address: safe_mac(host.resolved)}
     Broadcaster.publish(host, item, result)
     schedule_next(state.interval)
     {:noreply, state}
   end
+
+  # A crash would restart the Runner; repeated crashes exhaust MonitorSupervisor and
+  # stop every monitor. So an unexpected failure is shown as an NG result instead.
+  defp safe_probe(ip, item) do
+    Prober.probe(ip, item)
+  rescue
+    e -> {:error, first_line(Exception.message(e))}
+  catch
+    kind, reason -> {:error, first_line(Exception.format_banner(kind, reason))}
+  end
+
+  defp safe_mac(ip) do
+    MacResolver.lookup(ip)
+  rescue
+    _error -> nil
+  catch
+    _kind, _reason -> nil
+  end
+
+  # The result is one line on the console
+  defp first_line(message), do: message |> String.split("\n", parts: 2) |> hd()
 
   defp schedule_next(interval) do
     Process.send_after(self(), :probe, interval)
