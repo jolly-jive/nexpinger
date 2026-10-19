@@ -229,6 +229,111 @@ defmodule NexPinger.ConfigTest do
     end
   end
 
+  test "rejects ports, intervals and timeouts that are not integers in range" do
+    for {fields, expected} <- [
+          {"type: tcp, port: 0", "port must be an integer from 1 to 65535: 0"},
+          {"type: tcp, port: 65536", "port must be an integer from 1 to 65535: 65536"},
+          {"type: tcp, port: https", ~s|port must be an integer from 1 to 65535: "https"|},
+          {"type: udp, service: dns, port: -1", "port must be an integer from 1 to 65535: -1"},
+          {"interval: 0", "interval must be an integer from 1 to 86400000: 0"},
+          {"interval: 1.5", "interval must be an integer from 1 to 86400000: 1.5"},
+          {"interval: 86400001", "interval must be an integer from 1 to 86400000: 86400001"},
+          {"timeout: 1s", ~s|timeout must be an integer from 1 to 86400000: "1s"|},
+          {"timeout: ", "timeout must be an integer from 1 to 86400000: nil"}
+        ] do
+      path =
+        write_config!("""
+        hosts:
+          - name: server
+            address: 192.0.2.1
+            items: [{name: check, #{fields}}]
+        """)
+
+      assert {:error, message} = Config.load(path)
+      assert message == ~s|Item "check" (host: "server"): | <> expected
+    end
+  end
+
+  test "requires string names and addresses" do
+    for {host, expected} <- [
+          {"address: 192.0.2.1", "Host: name is missing"},
+          {"name: 123, address: 192.0.2.1", "Host: name must be a string: 123 (quote it)"},
+          {~s|name: "", address: 192.0.2.1|, "Host: name is empty"},
+          {"name: server", ~s|Host "server": address is missing|},
+          {"name: server, address: 10", ~s|Host "server": address must be a string: 10 (quote it)|}
+        ] do
+      path = write_config!("hosts:\n  - {#{host}, items: [{name: ping}]}\n")
+
+      assert {:error, message} = Config.load(path)
+      assert message == expected
+    end
+
+    path = write_config!("hosts:\n  - {name: server, address: 192.0.2.1, items: [{name: true}]}\n")
+    assert Config.load(path) == {:error, ~s|Item (host: "server"): name must be a string: true (quote it)|}
+  end
+
+  test "rejects a malformed structure" do
+    for {content, expected} <- [
+          {"hosts: server\n", ~s|"hosts" must be a list|},
+          {"- server\n", ~s|Not a YAML mapping with "hosts"|},
+          {"hosts: [server]\n", ~s|A host must be a mapping: "server"|},
+          {"hosts: [{name: s, address: 192.0.2.1}]\n", ~s|Host "s" needs a list of one or more items|},
+          {"hosts: [{name: s, address: 192.0.2.1, items: []}]\n", "needs a list of one or more items"},
+          {"hosts: [{name: s, address: 192.0.2.1, items: [ping]}]\n", ~s|An item must be a mapping: "ping"|},
+          {"hosts: [\n", "Invalid YAML: "}
+        ] do
+      path = write_config!(content)
+
+      assert {:error, message} = Config.load(path)
+      assert message =~ expected
+    end
+  end
+
+  test "an empty YAML file has no hosts" do
+    assert Config.load(write_config!("")) == {:ok, []}
+    assert Config.load(write_config!("hosts:\n")) == {:ok, []}
+  end
+
+  test "rejects duplicate host names and item names within a host" do
+    path =
+      write_config!("""
+      hosts:
+        - {name: server, address: 192.0.2.1, items: [{name: ping}]}
+        - {name: server, address: 192.0.2.2, items: [{name: ping}]}
+      """)
+
+    assert Config.load(path) == {:error, ~s|Duplicate host name: "server"|}
+
+    path =
+      write_config!("""
+      hosts:
+        - name: server
+          address: 192.0.2.1
+          items: [{name: web, type: tcp, port: 80}, {name: web, type: tcp, port: 443}]
+        - name: other
+          address: 192.0.2.2
+          items: [{name: web, type: tcp, port: 80}]
+      """)
+
+    assert Config.load(path) == {:error, ~s|Duplicate item name: "web" (host: "server")|}
+
+    path = write_config!("127.0.0.1 localhost\n::1 localhost\n")
+    assert Config.load(path) == {:error, ~s|Duplicate host name: "localhost"|}
+  end
+
+  test "hosts format errors name the line" do
+    assert Config.load(write_config!("192.0.2.1 a\n192.0.2.2\n")) ==
+             {:error, "Line 2: no host name after 192.0.2.2"}
+
+    assert Config.load(write_config!("192.0.2.1 a\nserver b\n")) ==
+             {:error, "Line 2: not an IP address: server"}
+  end
+
+  test "a missing file is a readable error" do
+    assert Config.load("/nonexistent/hosts.yml") ==
+             {:error, "Cannot read file: no such file or directory"}
+  end
+
   defp write_config!(content) do
     path = Path.join(System.tmp_dir!(), "nexpinger-config-#{System.unique_integer([:positive])}.yml")
     File.write!(path, content)

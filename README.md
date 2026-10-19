@@ -180,6 +180,9 @@ hosts:
 - `port` is required for `type: tcp`
 - `service` (`dns`, `ntp` or `quic`) is required for `type: udp`. `port` defaults to the service's standard port (dns: 53, ntp: 123, quic: 443)
 - An unknown key is a config error, so a typo is not silently ignored
+- `port` is an integer from 1 to 65535. `interval` and `timeout` are integers from 1 to 86400000 (one day)
+- `name` and `address` are strings. A YAML number such as `name: 123` is an error; quote it (`name: "123"`)
+- Host names must be unique across all config files, and Item names unique within a host
 
 ### ICMP checks
 

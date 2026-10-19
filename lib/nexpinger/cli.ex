@@ -205,8 +205,8 @@ defmodule NexPinger.CLI do
           end
         end
 
-      {:error, reason} ->
-        IO.puts(:stderr, "Failed to load config: #{inspect(reason)}")
+      {:error, message} ->
+        IO.puts(:stderr, "Failed to load config: #{message}")
         System.halt(1)
     end
   end
@@ -294,14 +294,16 @@ defmodule NexPinger.CLI do
           {:ok, file_hosts} ->
             {:cont, {:ok, [file_hosts | hosts]}}
 
-          {:error, reason} ->
-            {:halt, {:error, {path, reason}}}
+          {:error, message} ->
+            {:halt, {:error, "#{path}: #{message}"}}
         end
       end)
 
-    case result do
-      {:ok, host_lists} -> {:ok, List.flatten(host_lists)}
-      error -> error
+    # Each file is checked on load; this catches names repeated across files
+    with {:ok, host_lists} <- result,
+         hosts = host_lists |> Enum.reverse() |> List.flatten(),
+         :ok <- Config.check_duplicates(hosts) do
+      {:ok, hosts}
     end
   end
 
