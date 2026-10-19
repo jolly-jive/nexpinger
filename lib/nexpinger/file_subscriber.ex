@@ -5,8 +5,9 @@ defmodule NexPinger.FileSubscriber do
   Formats: `:text` (the screen's layout, with the MAC address), `:tsv` (tab-separated raw data),
   `:jsonl` (one JSON record per line).
 
-  A failed write does not stop monitoring: the result is lost, and stderr tells when writes
-  start failing and when they succeed again.
+  The file is opened for each line, so a log rotation tool can move or delete it: the next line
+  creates a new file (with the TSV header). A failed write does not stop monitoring: the result
+  is lost, and stderr tells when writes start failing and when they succeed again.
   """
 
   use GenServer
@@ -39,12 +40,8 @@ defmodule NexPinger.FileSubscriber do
   """
   @spec prepare(String.t(), format()) :: :ok | {:error, String.t()}
   def prepare(path, format) do
-    with :ok <- File.mkdir_p(Path.dirname(path)),
-         :ok <- File.touch(path),
-         {:ok, %File.Stat{size: size}} <- File.stat(path),
-         :ok <- write_header(path, format, size) do
-      :ok
-    else
+    case append_line(path, format, []) do
+      :ok -> :ok
       {:error, reason} -> {:error, "Cannot open log file: #{path}: #{:file.format_error(reason)}"}
     end
   end
@@ -62,7 +59,9 @@ defmodule NexPinger.FileSubscriber do
         {:item_result, %Host{} = host, %Item{} = item, result},
         %{path: path, format: format, owner: owner, widths: widths} = state
       ) do
-    case append_line(path, format_record(format, Timestamp.now(), host, item, result, widths)) do
+    line = format_record(format, Timestamp.now(), host, item, result, widths)
+
+    case append_line(path, format, line) do
       :ok ->
         notify_owner(owner, {:file_written, path})
         {:noreply, report_recovery(state)}
@@ -162,11 +161,22 @@ defmodule NexPinger.FileSubscriber do
   defp reason_string(reason) when is_binary(reason), do: reason
   defp reason_string(reason), do: inspect(reason)
 
-  # Don't repeat the header when appending
-  defp write_header(path, :tsv, 0), do: append_line(path, tsv_header())
-  defp write_header(_path, _format, _size), do: :ok
+  # Recreates a moved or deleted file, with the TSV header
+  defp append_line(path, format, line) do
+    with :ok <- File.mkdir_p(Path.dirname(path)) do
+      File.write(path, [header(path, format), line], [:append])
+    end
+  end
 
-  defp append_line(path, line), do: File.write(path, line, [:append])
+  # Don't repeat the header when appending
+  defp header(path, :tsv) do
+    case File.stat(path) do
+      {:ok, %File.Stat{size: size}} when size > 0 -> []
+      _new_or_unreadable -> tsv_header()
+    end
+  end
+
+  defp header(_path, _format), do: []
 
   defp notify_owner(nil, _message), do: :ok
   defp notify_owner(owner, message), do: send(owner, message)

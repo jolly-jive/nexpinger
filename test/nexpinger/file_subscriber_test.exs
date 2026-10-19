@@ -121,6 +121,21 @@ defmodule NexPinger.FileSubscriberTest do
       assert row =~ ~r/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\tgateway\t/
     end
 
+    test "recreates a moved file, with the TSV header", %{tmp_dir: tmp_dir} do
+      path = Path.join([tmp_dir, "logs", "monitor.tsv"])
+      {:ok, state} = FileSubscriber.init({path, :tsv, nil, @widths})
+      result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}
+      FileSubscriber.handle_info(result, state)
+
+      File.rename!(Path.dirname(path), Path.join(tmp_dir, "old"))
+      FileSubscriber.handle_info(result, state)
+
+      for file <- [path, Path.join([tmp_dir, "old", "monitor.tsv"])] do
+        assert [header, _row] = file |> File.read!() |> String.split("\n", trim: true)
+        assert String.starts_with?(header, "timestamp\t")
+      end
+    end
+
     test "does not write a header for text or jsonl", %{tmp_dir: tmp_dir} do
       for format <- [:text, :jsonl] do
         path = Path.join(tmp_dir, "monitor.#{format}")
