@@ -120,6 +120,8 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux_x
 
 Without `--log-file`, nothing is written to a file.
 
+If the log file cannot be created at startup, NexPinger exits with an error. If a write fails while running (e.g. a full disk), monitoring continues and those results are not saved; stderr reports when writes start failing and when they succeed again.
+
 On a TTY, `Tab` switches between Ping Results and Ping Statistics. On the stats screen, scroll with the Up/Down keys or `j`/`k`, and quit with `Q`. Stats are shown per Host/Item. Runs, failures, and loss rate are totals since startup. Average, P95, and P99 use only successful RTTs in the last `N` attempts; failures are excluded. The Latest column shows `ok <RTT>` on success and `NG` in red on failure. The MAC column shows `mac` / `no-mac` / `-` as of the latest attempt (see [Sample output](#sample-output)). The unit is shown at the top as `RTT: ms`. A bell rings on failure on both screens. Without a TTY, output is the plain result stream.
 
 Percentiles use the nearest-rank method. With no RTT samples, `-` is shown.

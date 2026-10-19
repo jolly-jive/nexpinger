@@ -1,6 +1,8 @@
 defmodule NexPinger.FileSubscriberTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureIO
+
   alias NexPinger.{FileSubscriber, Host, Item}
 
   @timestamp "2026-09-30 12:00:00.123"
@@ -125,6 +127,52 @@ defmodule NexPinger.FileSubscriberTest do
         {:ok, _state} = FileSubscriber.init({path, format, nil, @widths})
         assert File.read!(path) == ""
       end
+    end
+
+    test "reports a path it cannot create", %{tmp_dir: tmp_dir} do
+      file = Path.join(tmp_dir, "file")
+      File.write!(file, "")
+      path = Path.join(file, "monitor.log")
+
+      assert {:error, message} = FileSubscriber.prepare(path, :text)
+      assert message =~ "Cannot open log file: #{path}: "
+      assert {:stop, ^message} = FileSubscriber.init({path, :text, nil, @widths})
+    end
+
+    test "keeps going when a write fails, reporting only the failure and the recovery",
+         %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "monitor.log")
+      {:ok, state} = FileSubscriber.init({path, :text, self(), @widths})
+      result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}
+
+      # A directory in place of the file makes every write fail
+      File.rm!(path)
+      File.mkdir!(path)
+
+      {state, stderr} =
+        with_io(:stderr, fn ->
+          {:noreply, state} = FileSubscriber.handle_info(result, state)
+          {:noreply, state} = FileSubscriber.handle_info(result, state)
+          state
+        end)
+
+      assert_received {:file_write_failed, ^path, :eisdir}
+
+      assert stderr ==
+               "Log file write failed: #{path}: illegal operation on a directory " <>
+                 "(results are not saved until writes succeed)\n"
+
+      File.rmdir!(path)
+
+      {_state, stderr} =
+        with_io(:stderr, fn ->
+          {:noreply, state} = FileSubscriber.handle_info(result, state)
+          {:noreply, state} = FileSubscriber.handle_info(result, state)
+          state
+        end)
+
+      assert stderr == "Log file writes resumed: #{path}\n"
+      assert path |> File.read!() |> String.split("\n", trim: true) |> length() == 2
     end
   end
 end

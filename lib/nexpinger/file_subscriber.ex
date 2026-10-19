@@ -4,6 +4,9 @@ defmodule NexPinger.FileSubscriber do
 
   Formats: `:text` (the screen's layout, with the MAC address), `:tsv` (tab-separated raw data),
   `:jsonl` (one JSON record per line).
+
+  A failed write does not stop monitoring: the result is lost, and stderr tells when writes
+  start failing and when they succeed again.
   """
 
   use GenServer
@@ -30,17 +33,28 @@ defmodule NexPinger.FileSubscriber do
     GenServer.start_link(__MODULE__, {path, format, owner, widths}, name: name)
   end
 
+  @doc """
+  Creates the file (and its directory) and writes the TSV header to an empty file.
+  The CLI calls this before starting, to report a bad path as a plain message.
+  """
+  @spec prepare(String.t(), format()) :: :ok | {:error, String.t()}
+  def prepare(path, format) do
+    with :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- File.touch(path),
+         {:ok, %File.Stat{size: size}} <- File.stat(path),
+         :ok <- write_header(path, format, size) do
+      :ok
+    else
+      {:error, reason} -> {:error, "Cannot open log file: #{path}: #{:file.format_error(reason)}"}
+    end
+  end
+
   @impl true
   def init({path, format, owner, widths}) do
-    File.mkdir_p!(Path.dirname(path))
-    File.touch!(path)
-
-    # Don't repeat the header when appending
-    if format == :tsv and File.stat!(path).size == 0 do
-      append_line(path, tsv_header())
+    case prepare(path, format) do
+      :ok -> {:ok, %{path: path, format: format, owner: owner, widths: widths, failed?: false}}
+      {:error, message} -> {:stop, message}
     end
-
-    {:ok, %{path: path, format: format, owner: owner, widths: widths}}
   end
 
   @impl true
@@ -48,9 +62,34 @@ defmodule NexPinger.FileSubscriber do
         {:item_result, %Host{} = host, %Item{} = item, result},
         %{path: path, format: format, owner: owner, widths: widths} = state
       ) do
-    append_line(path, format_record(format, Timestamp.now(), host, item, result, widths))
-    notify_owner(owner, {:file_written, path})
-    {:noreply, state}
+    case append_line(path, format_record(format, Timestamp.now(), host, item, result, widths)) do
+      :ok ->
+        notify_owner(owner, {:file_written, path})
+        {:noreply, report_recovery(state)}
+
+      {:error, reason} ->
+        notify_owner(owner, {:file_write_failed, path, reason})
+        {:noreply, report_failure(state, reason)}
+    end
+  end
+
+  # Report only the changes, not every lost line
+  defp report_failure(%{failed?: true} = state, _reason), do: state
+
+  defp report_failure(%{path: path} = state, reason) do
+    IO.puts(
+      :stderr,
+      "Log file write failed: #{path}: #{:file.format_error(reason)} (results are not saved until writes succeed)"
+    )
+
+    %{state | failed?: true}
+  end
+
+  defp report_recovery(%{failed?: false} = state), do: state
+
+  defp report_recovery(%{path: path} = state) do
+    IO.puts(:stderr, "Log file writes resumed: #{path}")
+    %{state | failed?: false}
   end
 
   @doc """
@@ -123,10 +162,11 @@ defmodule NexPinger.FileSubscriber do
   defp reason_string(reason) when is_binary(reason), do: reason
   defp reason_string(reason), do: inspect(reason)
 
-  defp append_line(path, line) do
-    File.write(path, line, [:append])
-    :ok
-  end
+  # Don't repeat the header when appending
+  defp write_header(path, :tsv, 0), do: append_line(path, tsv_header())
+  defp write_header(_path, _format, _size), do: :ok
+
+  defp append_line(path, line), do: File.write(path, line, [:append])
 
   defp notify_owner(nil, _message), do: :ok
   defp notify_owner(owner, message), do: send(owner, message)

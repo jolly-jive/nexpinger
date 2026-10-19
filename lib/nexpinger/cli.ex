@@ -149,6 +149,10 @@ defmodule NexPinger.CLI do
         stats_height = TerminalInput.terminal_height()
         interactive? = stdout_enabled and TerminalInput.available?()
 
+        if log_file do
+          start_log_file_subscriber(log_file, log_format, ResultLine.widths(hosts))
+        end
+
         ConsoleSubscriber.configure(hosts, stats_window, stats_width, stats_height)
 
         IO.puts(
@@ -170,10 +174,6 @@ defmodule NexPinger.CLI do
         Enum.each(address_warnings ++ ntp_warnings(hosts), &IO.puts(:stderr, &1))
 
         IO.puts(String.duplicate("-", 60))
-
-        if log_file do
-          start_log_file_subscriber(log_file, log_format, ResultLine.widths(hosts))
-        end
 
         if stdout_enabled do
           NexPinger.Broadcaster.subscribe(NexPinger.ConsoleSubscriber)
@@ -310,8 +310,16 @@ defmodule NexPinger.CLI do
   defp start_log_file_subscriber(log_file, log_format, widths) do
     case Process.whereis(:log_file_subscriber) do
       nil ->
-        FileSubscriber.start_link(log_file, :log_file_subscriber, nil, log_format, widths)
-        NexPinger.Broadcaster.subscribe(:log_file_subscriber)
+        # Checked here: a failing start_link would take this (linked) process down with it
+        case FileSubscriber.prepare(log_file, log_format) do
+          :ok ->
+            FileSubscriber.start_link(log_file, :log_file_subscriber, nil, log_format, widths)
+            NexPinger.Broadcaster.subscribe(:log_file_subscriber)
+
+          {:error, message} ->
+            IO.puts(:stderr, message)
+            System.halt(1)
+        end
 
       _pid ->
         :ok
