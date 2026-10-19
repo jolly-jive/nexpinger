@@ -1,0 +1,77 @@
+# Compiles, tests and lints on pushes to main and on pull requests.
+# Release builds (escript, Burrito) are in release.yml.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - LICENSE
+      - NOTICE
+      - THIRD_PARTY_NOTICES
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - LICENSE
+      - NOTICE
+      - THIRD_PARTY_NOTICES
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported OTP, as the escript in release.yml
+          - otp: "27"
+            elixir: "1.20"
+            version-type: loose
+          # The ERTS that Burrito bundles, as in release.yml; lints run here only
+          - otp: "29.1"
+            elixir: "1.20.0"
+            version-type: strict
+            lint: true
+    name: OTP ${{ matrix.otp }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+          version-type: ${{ matrix.version-type }}
+
+      # deps and _build (Dialyzer PLTs included), per exact OTP / Elixir version
+      - uses: actions/cache@v6
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
+
+      - run: mix deps.get
+
+      - if: matrix.lint
+        run: mix format --check-formatted
+
+      - run: mix compile --warnings-as-errors
+
+      - run: mix test --warnings-as-errors
+
+      - if: matrix.lint
+        run: mix credo --strict
+
+      - if: matrix.lint
+        run: mix dialyzer --format github

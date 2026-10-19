@@ -5,7 +5,8 @@ defmodule NexPinger.IcmpSocketTest do
 
   describe "build_packet/5 and checksum/1" do
     test "a packet with its checksum filled in verifies to zero" do
-      packet = IcmpSocket.build_packet(8, 0x1234, 0x0001, "abcdefghijklmnopqrstuvwabcdefghi", true)
+      packet =
+        IcmpSocket.build_packet(8, 0x1234, 0x0001, "abcdefghijklmnopqrstuvwabcdefghi", true)
 
       assert <<8, 0, checksum::16, 0x1234::16, 0x0001::16, _::binary>> = packet
       assert checksum != 0

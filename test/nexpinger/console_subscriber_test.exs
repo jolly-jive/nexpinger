@@ -71,7 +71,13 @@ defmodule NexPinger.ConsoleSubscriberTest do
   end
 
   test "shows mac when the MAC address is found" do
-    host = %Host{name: "gateway", address: "192.0.2.1", mac_address: "00:00:5e:00:53:01", items: []}
+    host = %Host{
+      name: "gateway",
+      address: "192.0.2.1",
+      mac_address: "00:00:5e:00:53:01",
+      items: []
+    }
+
     item = %Item{name: "ping", type: :icmp}
     {:ok, state} = ConsoleSubscriber.init([])
 

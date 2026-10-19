@@ -5,10 +5,14 @@ defmodule NexPinger.MacResolverTest do
 
   describe "parse_ip_neigh/1" do
     test "takes the lladdr of IPv4 and IPv6 entries, STALE included" do
-      assert MacResolver.parse_ip_neigh("192.168.0.1 dev eth0 lladdr 00:00:5E:00:53:01 REACHABLE\n") ==
+      assert MacResolver.parse_ip_neigh(
+               "192.168.0.1 dev eth0 lladdr 00:00:5E:00:53:01 REACHABLE\n"
+             ) ==
                "00:00:5e:00:53:01"
 
-      assert MacResolver.parse_ip_neigh("2001:db8::1 dev eth0 lladdr 00:00:5e:00:53:02 router STALE\n") ==
+      assert MacResolver.parse_ip_neigh(
+               "2001:db8::1 dev eth0 lladdr 00:00:5e:00:53:02 router STALE\n"
+             ) ==
                "00:00:5e:00:53:02"
     end
 

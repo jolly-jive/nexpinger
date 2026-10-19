@@ -39,7 +39,9 @@ defmodule NexPinger.UdpProbeTest do
     end
 
     test "works over IPv6" do
-      {:ok, server} = :gen_udp.open(0, [:binary, :inet6, active: false, ip: {0, 0, 0, 0, 0, 0, 0, 1}])
+      {:ok, server} =
+        :gen_udp.open(0, [:binary, :inet6, active: false, ip: {0, 0, 0, 0, 0, 0, 0, 1}])
+
       {:ok, port} = :inet.port(server)
 
       Task.start(fn ->

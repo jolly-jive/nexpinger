@@ -155,83 +155,87 @@ defmodule NexPinger.CLI do
         System.halt(1)
 
       {:ok, hosts} ->
-        {hosts, address_warnings} =
-          case resolve_hosts(hosts) do
-            {:ok, hosts, warnings} ->
-              {hosts, warnings}
-
-            {:error, errors} ->
-              Enum.each(errors, &IO.puts(:stderr, &1))
-              System.halt(1)
-          end
-
-        networks = OnLink.networks()
-        hosts = Enum.map(hosts, &%{&1 | on_link: OnLink.on_link?(&1.ip, networks)})
-
-        item_count = Enum.sum(Enum.map(hosts, &length(&1.items)))
-        stats_width = requested_stats_width || TerminalInput.terminal_width()
-        stats_height = TerminalInput.terminal_height()
-        interactive? = stdout_enabled and TerminalInput.available?()
-
-        if log do
-          start_log_file_subscriber(log, ResultLine.widths(hosts))
-        end
-
-        ConsoleSubscriber.configure(hosts, stats_window, stats_width, stats_height)
-
-        IO.puts(
-          "NexPinger (Elixir CUI) started: #{length(hosts)} hosts, #{item_count} items (#{Enum.join(paths, ", ")})"
-        )
-
-        if log do
-          IO.puts("Log file: #{log_file_description(log)}")
-        end
-
-        IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
-
-        if Enum.any?(hosts, fn host -> Enum.any?(host.items, &(&1.type == :icmp)) end) do
-          IO.puts("ICMP: #{Prober.icmp_method()}")
-        end
-
-        Enum.each(resolved_messages(hosts), &IO.puts/1)
-
-        Enum.each(address_warnings ++ ntp_warnings(hosts), &IO.puts(:stderr, &1))
-
-        IO.puts(String.duplicate("-", 60))
-
-        if stdout_enabled do
-          NexPinger.Broadcaster.subscribe(NexPinger.ConsoleSubscriber)
-        end
-
-        Enum.each(hosts, fn host ->
-          Enum.each(host.items, fn item ->
-            case DynamicSupervisor.start_child(
-                   NexPinger.MonitorSupervisor,
-                   {Runner, {host, item}}
-                 ) do
-              {:ok, _pid} -> :ok
-              {:error, reason} -> IO.puts(:stderr, "Failed to start monitor: #{inspect(reason)}")
-            end
-          end)
-        end)
-
-        if interactive? do
-          case TerminalInput.run() do
-            :quit -> System.halt(0)
-            :unavailable -> Process.sleep(:infinity)
-          end
-        else
-          # No key input: keep the main process alive (Ctrl+C to quit).
-          # Windows reads Ctrl+C as a key, or the VM would show its BREAK menu.
-          case TerminalInput.wait_for_interrupt() do
-            :quit -> System.halt(0)
-            :unavailable -> Process.sleep(:infinity)
-          end
-        end
+        start(hosts, paths, log, stdout_enabled, stats_window, requested_stats_width)
 
       {:error, message} ->
         IO.puts(:stderr, "Failed to load config: #{message}")
         System.halt(1)
+    end
+  end
+
+  defp start(hosts, paths, log, stdout_enabled, stats_window, requested_stats_width) do
+    {hosts, address_warnings} =
+      case resolve_hosts(hosts) do
+        {:ok, hosts, warnings} ->
+          {hosts, warnings}
+
+        {:error, errors} ->
+          Enum.each(errors, &IO.puts(:stderr, &1))
+          System.halt(1)
+      end
+
+    networks = OnLink.networks()
+    hosts = Enum.map(hosts, &%{&1 | on_link: OnLink.on_link?(&1.ip, networks)})
+
+    stats_width = requested_stats_width || TerminalInput.terminal_width()
+    stats_height = TerminalInput.terminal_height()
+    interactive? = stdout_enabled and TerminalInput.available?()
+
+    if log do
+      start_log_file_subscriber(log, ResultLine.widths(hosts))
+    end
+
+    ConsoleSubscriber.configure(hosts, stats_window, stats_width, stats_height)
+    print_banner(hosts, paths, log, stdout_enabled, address_warnings)
+
+    if stdout_enabled do
+      NexPinger.Broadcaster.subscribe(NexPinger.ConsoleSubscriber)
+    end
+
+    for host <- hosts, item <- host.items, do: start_monitor(host, item)
+
+    wait_for_quit(interactive?)
+  end
+
+  defp print_banner(hosts, paths, log, stdout_enabled, address_warnings) do
+    item_count = Enum.sum(Enum.map(hosts, &length(&1.items)))
+
+    IO.puts(
+      "NexPinger (Elixir CUI) started: #{length(hosts)} hosts, #{item_count} items (#{Enum.join(paths, ", ")})"
+    )
+
+    if log do
+      IO.puts("Log file: #{log_file_description(log)}")
+    end
+
+    IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
+
+    if Enum.any?(hosts, fn host -> Enum.any?(host.items, &(&1.type == :icmp)) end) do
+      IO.puts("ICMP: #{Prober.icmp_method()}")
+    end
+
+    Enum.each(resolved_messages(hosts), &IO.puts/1)
+
+    Enum.each(address_warnings ++ ntp_warnings(hosts), &IO.puts(:stderr, &1))
+
+    IO.puts(String.duplicate("-", 60))
+  end
+
+  defp start_monitor(host, item) do
+    case DynamicSupervisor.start_child(NexPinger.MonitorSupervisor, {Runner, {host, item}}) do
+      {:ok, _pid} -> :ok
+      {:error, reason} -> IO.puts(:stderr, "Failed to start monitor: #{inspect(reason)}")
+    end
+  end
+
+  # Without key input, only Ctrl+C quits.
+  # Windows reads Ctrl+C as a key, or the VM would show its BREAK menu.
+  defp wait_for_quit(interactive?) do
+    result = if interactive?, do: TerminalInput.run(), else: TerminalInput.wait_for_interrupt()
+
+    case result do
+      :quit -> System.halt(0)
+      :unavailable -> Process.sleep(:infinity)
     end
   end
 

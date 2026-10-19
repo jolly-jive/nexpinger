@@ -90,7 +90,7 @@ defmodule NexPinger.ConfigTest do
 
     assert host.items == [
              %Item{name: "dns", type: :udp, service: :dns, port: 53},
-             %Item{name: "ntp", type: :udp, service: :ntp, port: 123, interval: 10000},
+             %Item{name: "ntp", type: :udp, service: :ntp, port: 123, interval: 10_000},
              %Item{name: "h3", type: :udp, service: :quic, port: 8443}
            ]
   end
@@ -260,7 +260,8 @@ defmodule NexPinger.ConfigTest do
           {"name: 123, address: 192.0.2.1", "Host: name must be a string: 123 (quote it)"},
           {~s|name: "", address: 192.0.2.1|, "Host: name is empty"},
           {"name: server", ~s|Host "server": address is missing|},
-          {"name: server, address: 10", ~s|Host "server": address must be a string: 10 (quote it)|}
+          {"name: server, address: 10",
+           ~s|Host "server": address must be a string: 10 (quote it)|}
         ] do
       path = write_config!("hosts:\n  - {#{host}, items: [{name: ping}]}\n")
 
@@ -268,8 +269,11 @@ defmodule NexPinger.ConfigTest do
       assert message == expected
     end
 
-    path = write_config!("hosts:\n  - {name: server, address: 192.0.2.1, items: [{name: true}]}\n")
-    assert Config.load(path) == {:error, ~s|Item (host: "server"): name must be a string: true (quote it)|}
+    path =
+      write_config!("hosts:\n  - {name: server, address: 192.0.2.1, items: [{name: true}]}\n")
+
+    assert Config.load(path) ==
+             {:error, ~s|Item (host: "server"): name must be a string: true (quote it)|}
   end
 
   test "rejects a malformed structure" do
@@ -277,9 +281,12 @@ defmodule NexPinger.ConfigTest do
           {"hosts: server\n", ~s|"hosts" must be a list|},
           {"- server\n", ~s|Not a YAML mapping with "hosts"|},
           {"hosts: [server]\n", ~s|A host must be a mapping: "server"|},
-          {"hosts: [{name: s, address: 192.0.2.1}]\n", ~s|Host "s" needs a list of one or more items|},
-          {"hosts: [{name: s, address: 192.0.2.1, items: []}]\n", "needs a list of one or more items"},
-          {"hosts: [{name: s, address: 192.0.2.1, items: [ping]}]\n", ~s|An item must be a mapping: "ping"|},
+          {"hosts: [{name: s, address: 192.0.2.1}]\n",
+           ~s|Host "s" needs a list of one or more items|},
+          {"hosts: [{name: s, address: 192.0.2.1, items: []}]\n",
+           "needs a list of one or more items"},
+          {"hosts: [{name: s, address: 192.0.2.1, items: [ping]}]\n",
+           ~s|An item must be a mapping: "ping"|},
           {"hosts: [\n", "Invalid YAML: "}
         ] do
       path = write_config!(content)
@@ -355,7 +362,9 @@ defmodule NexPinger.ConfigTest do
   end
 
   defp write_config!(content) do
-    path = Path.join(System.tmp_dir!(), "nexpinger-config-#{System.unique_integer([:positive])}.yml")
+    path =
+      Path.join(System.tmp_dir!(), "nexpinger-config-#{System.unique_integer([:positive])}.yml")
+
     File.write!(path, content)
     on_exit(fn -> File.rm(path) end)
     path

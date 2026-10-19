@@ -42,7 +42,14 @@ defmodule NexPinger.ResultLine do
   @doc """
   Formats one result, without a newline.
   """
-  @spec format(String.t(), Host.t(), Item.t(), {:ok, number()} | {:error, term()}, widths(), target()) ::
+  @spec format(
+          String.t(),
+          Host.t(),
+          Item.t(),
+          {:ok, number()} | {:error, term()},
+          widths(),
+          target()
+        ) ::
           iodata()
   def format(timestamp, %Host{} = host, %Item{} = item, result, widths, target) do
     [

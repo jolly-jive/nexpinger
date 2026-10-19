@@ -124,7 +124,8 @@ defmodule NexPinger.MixProject do
       compilers: Mix.compilers() ++ [:icmp_helper],
       deps: deps(),
       escript: escript(),
-      releases: releases()
+      releases: releases(),
+      dialyzer: dialyzer()
     ]
   end
 
@@ -138,10 +139,17 @@ defmodule NexPinger.MixProject do
   defp deps do
     [
       {:yaml_elixir, "~> 2.9"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       # prod only: escript.build embeds every dep of the env, runtime: false or not.
       # Build the escript in another env to keep Burrito and its deps out.
       {:burrito, "~> 1.0", runtime: false, only: :prod}
     ]
+  end
+
+  # PLTs under _build so CI can cache them in one place
+  defp dialyzer do
+    [plt_core_path: "_build/plts", plt_local_path: "_build/plts"]
   end
 
   defp escript do

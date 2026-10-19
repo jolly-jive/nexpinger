@@ -39,7 +39,10 @@ defmodule NexPinger.ProberTest do
     end
 
     test "works on OEM code page (non UTF-8) output" do
-      output = <<"8.8.8.8 ", 0x82, 0xA9, 0x82, 0xE7, ": bytes=32 ", 0x8E, 0x9E, 0x8A, 0xD4, " =3ms TTL=117">>
+      output =
+        <<"8.8.8.8 ", 0x82, 0xA9, 0x82, 0xE7, ": bytes=32 ", 0x8E, 0x9E, 0x8A, 0xD4,
+          " =3ms TTL=117">>
+
       assert Prober.parse_ping_time(output, @windows, "8.8.8.8") == {:ok, 3.0}
     end
   end

@@ -49,6 +49,7 @@ defmodule NexPinger.Launcher do
   end
 
   @doc "Restores the terminal and halts. Does not write to stdout: the pipe may be broken."
+  @spec stop() :: no_return()
   def stop do
     TerminalInput.restore()
     System.halt(0)

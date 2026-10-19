@@ -54,9 +54,8 @@ defmodule NexPinger.TerminalInput do
   end
 
   defp stty_size do
-    with {:ok, output} <- stty(["size"]) do
-      parse_size(output)
-    else
+    case stty(["size"]) do
+      {:ok, output} -> parse_size(output)
       _ -> nil
     end
   end

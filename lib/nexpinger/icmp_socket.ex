@@ -69,8 +69,9 @@ defmodule NexPinger.IcmpSocket do
   defp unavailable_reason(reason) when reason in [:eacces, :eperm],
     do: "permission denied; net.ipv4.ping_group_range does not include this user's groups"
 
-  defp unavailable_reason(reason) when reason in [:eprotonosupport, :eafnosupport, :esocktnosupport],
-    do: "the kernel does not support ICMP datagram sockets"
+  defp unavailable_reason(reason)
+       when reason in [:eprotonosupport, :eafnosupport, :esocktnosupport],
+       do: "the kernel does not support ICMP datagram sockets"
 
   defp unavailable_reason(:socket_not_supported),
     do: "this Erlang/OTP runtime does not support :socket"
@@ -107,22 +108,23 @@ defmodule NexPinger.IcmpSocket do
     if remaining_ms <= 0 do
       {:error, "timeout"}
     else
-      case :socket.recv(socket, 0, remaining_ms) do
-        {:ok, reply} ->
-          if reply?(reply, reply_type, seq, payload) do
-            {:ok, (System.monotonic_time(:microsecond) - started) / 1000.0}
-          else
-            await_reply(socket, reply_type, seq, payload, started, deadline)
-          end
-
-        {:error, :timeout} ->
-          {:error, "timeout"}
-
-        {:error, reason} ->
-          {:error, error_message(reason)}
-      end
+      socket
+      |> :socket.recv(0, remaining_ms)
+      |> handle_recv(socket, reply_type, seq, payload, started, deadline)
     end
   end
+
+  defp handle_recv({:ok, reply}, socket, reply_type, seq, payload, started, deadline) do
+    if reply?(reply, reply_type, seq, payload),
+      do: {:ok, (System.monotonic_time(:microsecond) - started) / 1000.0},
+      else: await_reply(socket, reply_type, seq, payload, started, deadline)
+  end
+
+  defp handle_recv({:error, :timeout}, _socket, _type, _seq, _payload, _started, _deadline),
+    do: {:error, "timeout"}
+
+  defp handle_recv({:error, reason}, _socket, _type, _seq, _payload, _started, _deadline),
+    do: {:error, error_message(reason)}
 
   @doc false
   @spec reply?(binary(), non_neg_integer(), non_neg_integer(), binary()) :: boolean()

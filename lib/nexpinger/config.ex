@@ -205,34 +205,34 @@ defmodule NexPinger.Config do
     name = string!(map, "name", "Item (host: #{inspect(host_name)})")
     owner = "Item #{inspect(name)} (host: #{inspect(host_name)})"
 
-    type =
-      case Map.get(map, "type", "icmp") do
-        "icmp" -> :icmp
-        "tcp" -> :tcp
-        "udp" -> :udp
-        other -> raise "Unknown type: #{inspect(other)} (item: #{inspect(name)})"
-      end
-
-    if type == :tcp and is_nil(map["port"]) do
-      raise "#{owner} needs a port (type: tcp)"
-    end
-
+    type = item_type!(map, name)
     service = if type == :udp, do: udp_service!(map)
-
-    port =
-      case map["port"] do
-        nil -> service && UdpProbe.services()[service]
-        _port -> integer!(map, "port", 1..65535, owner)
-      end
 
     %Item{
       name: name,
       type: type,
       service: service,
-      port: port,
+      port: port!(map, type, service, owner),
       interval: integer!(map, "interval", 1..@max_ms, owner, default_interval(service)),
       timeout: integer!(map, "timeout", 1..@max_ms, owner, 1000)
     }
+  end
+
+  defp item_type!(map, name) do
+    case Map.get(map, "type", "icmp") do
+      "icmp" -> :icmp
+      "tcp" -> :tcp
+      "udp" -> :udp
+      other -> raise "Unknown type: #{inspect(other)} (item: #{inspect(name)})"
+    end
+  end
+
+  defp port!(map, type, service, owner) do
+    case map["port"] do
+      nil when type == :tcp -> raise "#{owner} needs a port (type: tcp)"
+      nil -> service && UdpProbe.services()[service]
+      _port -> integer!(map, "port", 1..65_535, owner)
+    end
   end
 
   defp integer!(map, key, first..last//1, owner, default \\ nil) do
