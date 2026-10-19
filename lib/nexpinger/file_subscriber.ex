@@ -5,6 +5,10 @@ defmodule NexPinger.FileSubscriber do
   Formats: `:text` (the screen's layout, with the MAC address), `:tsv` (tab-separated raw data),
   `:jsonl` (one JSON record per line).
 
+  With `:daily` rotation, results go to a file per day: the date goes before the last extension
+  (`monitor.tsv` -> `monitor-2026-10-19.tsv`), or at the end without one. The date is the
+  result's timestamp's (local time).
+
   The file is opened for each line, so a log rotation tool can move or delete it: the next line
   creates a new file (with the TSV header). A failed write does not stop monitoring: the result
   is lost, and stderr tells when writes start failing and when they succeed again.
@@ -15,23 +19,42 @@ defmodule NexPinger.FileSubscriber do
   alias NexPinger.{Host, Item, ResultLine, Timestamp}
 
   @type format :: :text | :tsv | :jsonl
+  @type rotate :: nil | :daily
 
   @formats [:text, :tsv, :jsonl]
+  @rotates [:daily]
 
   @fields ~w(timestamp host address resolved mac item type port status rtt_ms error)
 
   @spec formats() :: [format()]
   def formats, do: @formats
 
+  @spec rotates() :: [rotate()]
+  def rotates, do: @rotates
+
   def start_link(
         path \\ "monitor.log",
         name \\ __MODULE__,
         owner \\ nil,
         format \\ :text,
-        widths \\ ResultLine.widths([])
+        widths \\ ResultLine.widths([]),
+        rotate \\ nil
       )
-      when format in @formats do
-    GenServer.start_link(__MODULE__, {path, format, owner, widths}, name: name)
+      when format in @formats and (rotate == nil or rotate in @rotates) do
+    GenServer.start_link(__MODULE__, {path, format, owner, widths, rotate}, name: name)
+  end
+
+  @doc """
+  The file a result with this timestamp goes to.
+  """
+  @spec file_path(String.t(), rotate(), String.t()) :: String.t()
+  def file_path(path, nil, _timestamp), do: path
+  def file_path(path, :daily, timestamp), do: dated_path(path, binary_part(timestamp, 0, 10))
+
+  # Path.rootname/1 would drop all of ".nexpinger", which has no extension
+  defp dated_path(path, date) do
+    extension = Path.extname(path)
+    String.replace_suffix(path, extension, "") <> "-" <> date <> extension
   end
 
   @doc """
@@ -47,35 +70,48 @@ defmodule NexPinger.FileSubscriber do
   end
 
   @impl true
-  def init({path, format, owner, widths}) do
-    case prepare(path, format) do
-      :ok -> {:ok, %{path: path, format: format, owner: owner, widths: widths, failed?: false}}
-      {:error, message} -> {:stop, message}
+  def init({path, format, owner, widths, rotate}) do
+    case prepare(file_path(path, rotate, Timestamp.now()), format) do
+      :ok ->
+        {:ok,
+         %{
+           path: path,
+           format: format,
+           owner: owner,
+           widths: widths,
+           rotate: rotate,
+           failed?: false
+         }}
+
+      {:error, message} ->
+        {:stop, message}
     end
   end
 
   @impl true
   def handle_info(
         {:item_result, %Host{} = host, %Item{} = item, result},
-        %{path: path, format: format, owner: owner, widths: widths} = state
+        %{format: format, owner: owner, widths: widths} = state
       ) do
-    line = format_record(format, Timestamp.now(), host, item, result, widths)
+    timestamp = Timestamp.now()
+    path = file_path(state.path, state.rotate, timestamp)
+    line = format_record(format, timestamp, host, item, result, widths)
 
     case append_line(path, format, line) do
       :ok ->
         notify_owner(owner, {:file_written, path})
-        {:noreply, report_recovery(state)}
+        {:noreply, report_recovery(state, path)}
 
       {:error, reason} ->
         notify_owner(owner, {:file_write_failed, path, reason})
-        {:noreply, report_failure(state, reason)}
+        {:noreply, report_failure(state, path, reason)}
     end
   end
 
   # Report only the changes, not every lost line
-  defp report_failure(%{failed?: true} = state, _reason), do: state
+  defp report_failure(%{failed?: true} = state, _path, _reason), do: state
 
-  defp report_failure(%{path: path} = state, reason) do
+  defp report_failure(state, path, reason) do
     IO.puts(
       :stderr,
       "Log file write failed: #{path}: #{:file.format_error(reason)} (results are not saved until writes succeed)"
@@ -84,9 +120,9 @@ defmodule NexPinger.FileSubscriber do
     %{state | failed?: true}
   end
 
-  defp report_recovery(%{failed?: false} = state), do: state
+  defp report_recovery(%{failed?: false} = state, _path), do: state
 
-  defp report_recovery(%{path: path} = state) do
+  defp report_recovery(state, path) do
     IO.puts(:stderr, "Log file writes resumed: #{path}")
     %{state | failed?: false}
   end

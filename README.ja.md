@@ -110,6 +110,7 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux_x
 
 - `--log-file PATH`: 監視結果を指定したファイルへ追記
 - `--log-format FORMAT`: ログファイルの形式（`text`（既定）/ `tsv` / `jsonl`）。`--log-file` と併せて指定する（単独指定はエラー）
+- `--log-rotate daily`: ログファイルを日ごとに分ける（後述）。`--log-file` と併せて指定する（単独指定はエラー）
 - `--no-stdout`: コンソールへの出力を抑止
 - `--stats-window N`: 平均・P95・P99 を計算する直近試行数（既定値1000、1以上）
 - `--stats-width N`: 統計画面の幅（80または120桁、省略時は端末幅から選択）
@@ -136,6 +137,8 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux_x
 ```
 
 Windows でも同様に、ファイルの名前を変えるか削除してください。
+
+`--log-rotate daily` を指定すると、日ごとに別のファイルへ書き込みます。日付は最後の拡張子の前に入り、拡張子が無ければ末尾に付きます（`monitor.tsv` -> `monitor-2026-10-19.tsv`、`monitor` -> `monitor-2026-10-19`）。日付は各結果のタイムスタンプ（ローカル時刻）のものです。古いファイルは削除しません。
 
 TTY では `Tab` で Ping結果と Ping統計を切り替え、統計画面では上下キーまたは `j`/`k` で一覧をスクロールし、`Q` で終了します。統計は Host/Item ごとに表示し、実施回数・失敗回数・失敗率は起動中の累計です。平均・P95・P99 は直近 `N` 回の試行に含まれる成功 RTT のみで計算し、失敗試行は RTT 統計から除外します。最新欄は成功時に `ok <RTT>`、失敗時に赤字の `NG` と表示します。MAC 欄は最新の試行時点の `mac` / `no-mac` / `-` です（意味は[出力例](#出力例)を参照）。単位は画面上部に `RTT: ms` と表示します。失敗時のベル通知はどちらの画面でも行われます。TTY が使えない場合は従来の追記出力になります。
 

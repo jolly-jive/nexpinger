@@ -129,7 +129,12 @@ defmodule NexPinger.CLITest do
 
   test "tells the resolved IP of host names only" do
     hosts = [
-      %NexPinger.Host{name: "web", address: "www.example.com", resolved: "203.0.113.10", items: []},
+      %NexPinger.Host{
+        name: "web",
+        address: "www.example.com",
+        resolved: "203.0.113.10",
+        items: []
+      },
       %NexPinger.Host{name: "gateway", address: "192.0.2.1", resolved: "192.0.2.1", items: []}
     ]
 
@@ -148,5 +153,30 @@ defmodule NexPinger.CLITest do
   test "returns invalid options" do
     assert {[], ["config/hosts.yml"], [{"--unknown", nil}]} =
              NexPinger.CLI.parse_options(["--unknown", "config/hosts.yml"])
+  end
+
+  test "parses the log rotate option" do
+    assert {[log_file: "monitor.tsv", log_rotate: "daily"], [], []} =
+             NexPinger.CLI.parse_options(["--log-file", "monitor.tsv", "--log-rotate", "daily"])
+  end
+
+  test "defaults to no log rotation" do
+    assert {:ok, nil} = NexPinger.CLI.log_rotate(log_file: "monitor.log")
+  end
+
+  test "accepts daily log rotation" do
+    assert {:ok, :daily} = NexPinger.CLI.log_rotate(log_file: "monitor.log", log_rotate: "daily")
+  end
+
+  test "rejects an unknown log rotation" do
+    assert {:error, message} =
+             NexPinger.CLI.log_rotate(log_file: "monitor.log", log_rotate: "hourly")
+
+    assert message =~ "daily"
+  end
+
+  test "rejects log rotation without a log file" do
+    assert {:error, message} = NexPinger.CLI.log_rotate(log_rotate: "daily")
+    assert message =~ "--log-file"
   end
 end

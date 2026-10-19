@@ -110,6 +110,7 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux_x
 
 - `--log-file PATH`: append results to this file
 - `--log-format FORMAT`: log file format (`text` (default) / `tsv` / `jsonl`). Requires `--log-file`
+- `--log-rotate daily`: write a log file per day (see below). Requires `--log-file`
 - `--no-stdout`: no console output
 - `--stats-window N`: number of recent attempts for average / P95 / P99 (default 1000, min 1)
 - `--stats-width N`: stats screen width (80 or 120 columns; picked from the terminal width if omitted)
@@ -136,6 +137,8 @@ The log file is opened for each line, so it can be rotated from outside: move or
 ```
 
 On Windows, rename or delete the file the same way.
+
+With `--log-rotate daily`, NexPinger writes a file per day instead: the date goes before the last extension, or at the end without one (`monitor.tsv` -> `monitor-2026-10-19.tsv`, `monitor` -> `monitor-2026-10-19`). The date is that of each result's timestamp (local time). Old files are not deleted.
 
 On a TTY, `Tab` switches between Ping Results and Ping Statistics. On the stats screen, scroll with the Up/Down keys or `j`/`k`, and quit with `Q`. Stats are shown per Host/Item. Runs, failures, and loss rate are totals since startup. Average, P95, and P99 use only successful RTTs in the last `N` attempts; failures are excluded. The Latest column shows `ok <RTT>` on success and `NG` in red on failure. The MAC column shows `mac` / `no-mac` / `-` as of the latest attempt (see [Sample output](#sample-output)). The unit is shown at the top as `RTT: ms`. A bell rings on failure on both screens. Without a TTY, output is the plain result stream.
 

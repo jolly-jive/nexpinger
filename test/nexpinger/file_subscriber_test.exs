@@ -3,7 +3,7 @@ defmodule NexPinger.FileSubscriberTest do
 
   import ExUnit.CaptureIO
 
-  alias NexPinger.{FileSubscriber, Host, Item}
+  alias NexPinger.{FileSubscriber, Host, Item, Timestamp}
 
   @timestamp "2026-09-30 12:00:00.123"
   @widths %{ip: 0, item: 0, port: 0}
@@ -102,15 +102,48 @@ defmodule NexPinger.FileSubscriberTest do
     end
   end
 
+  describe "daily rotation" do
+    test "puts the date before the last extension, or at the end without one" do
+      for {path, expected} <- [
+            {"monitor.tsv", "monitor-2026-09-30.tsv"},
+            {"monitor", "monitor-2026-09-30"},
+            {"logs.d/monitor", "logs.d/monitor-2026-09-30"},
+            {"monitor.log.tsv", "monitor.log-2026-09-30.tsv"},
+            {".nexpinger", ".nexpinger-2026-09-30"}
+          ] do
+        assert FileSubscriber.file_path(path, :daily, @timestamp) == expected
+      end
+    end
+
+    test "keeps the path without rotation" do
+      assert FileSubscriber.file_path("monitor.tsv", nil, @timestamp) == "monitor.tsv"
+    end
+
+    @tag :tmp_dir
+    test "writes to today's file", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "monitor.tsv")
+      before = FileSubscriber.file_path(path, :daily, Timestamp.now())
+      {:ok, state} = FileSubscriber.init({path, :tsv, self(), @widths, :daily})
+      FileSubscriber.handle_info({:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}, state)
+      after_ = FileSubscriber.file_path(path, :daily, Timestamp.now())
+
+      # Either side of midnight
+      assert_received {:file_written, written}
+      assert written in [before, after_]
+      refute File.exists?(path)
+      assert [_header, _row] = written |> File.read!() |> String.split("\n", trim: true)
+    end
+  end
+
   describe "file output" do
     @describetag :tmp_dir
 
     test "writes a TSV header only to an empty file", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "monitor.tsv")
 
-      {:ok, state} = FileSubscriber.init({path, :tsv, nil, @widths})
+      {:ok, state} = FileSubscriber.init({path, :tsv, nil, @widths, nil})
       FileSubscriber.handle_info({:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}, state)
-      {:ok, _state} = FileSubscriber.init({path, :tsv, nil, @widths})
+      {:ok, _state} = FileSubscriber.init({path, :tsv, nil, @widths, nil})
 
       [header | rows] = path |> File.read!() |> String.split("\n", trim: true)
 
@@ -123,7 +156,7 @@ defmodule NexPinger.FileSubscriberTest do
 
     test "recreates a moved file, with the TSV header", %{tmp_dir: tmp_dir} do
       path = Path.join([tmp_dir, "logs", "monitor.tsv"])
-      {:ok, state} = FileSubscriber.init({path, :tsv, nil, @widths})
+      {:ok, state} = FileSubscriber.init({path, :tsv, nil, @widths, nil})
       result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}
       FileSubscriber.handle_info(result, state)
 
@@ -139,7 +172,7 @@ defmodule NexPinger.FileSubscriberTest do
     test "does not write a header for text or jsonl", %{tmp_dir: tmp_dir} do
       for format <- [:text, :jsonl] do
         path = Path.join(tmp_dir, "monitor.#{format}")
-        {:ok, _state} = FileSubscriber.init({path, format, nil, @widths})
+        {:ok, _state} = FileSubscriber.init({path, format, nil, @widths, nil})
         assert File.read!(path) == ""
       end
     end
@@ -151,13 +184,13 @@ defmodule NexPinger.FileSubscriberTest do
 
       assert {:error, message} = FileSubscriber.prepare(path, :text)
       assert message =~ "Cannot open log file: #{path}: "
-      assert {:stop, ^message} = FileSubscriber.init({path, :text, nil, @widths})
+      assert {:stop, ^message} = FileSubscriber.init({path, :text, nil, @widths, nil})
     end
 
     test "keeps going when a write fails, reporting only the failure and the recovery",
          %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "monitor.log")
-      {:ok, state} = FileSubscriber.init({path, :text, self(), @widths})
+      {:ok, state} = FileSubscriber.init({path, :text, self(), @widths, nil})
       result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}
 
       # A directory in place of the file makes every write fail

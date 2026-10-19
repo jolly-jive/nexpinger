@@ -1,7 +1,7 @@
 defmodule NexPinger.CLI do
   @moduledoc """
   escript entry point.
-  Usage: nexpinger [--log-file PATH [--log-format FORMAT]] [--no-stdout] [--version] [--help] [config file...]
+  Usage: nexpinger [--log-file PATH [--log-format FORMAT] [--log-rotate daily]] [--no-stdout] [--version] [--help] [config file...]
   """
 
   alias NexPinger.{
@@ -14,6 +14,7 @@ defmodule NexPinger.CLI do
     ResultLine,
     Runner,
     TerminalInput,
+    Timestamp,
     UdpProbe
   }
 
@@ -22,6 +23,7 @@ defmodule NexPinger.CLI do
 
     --log-file PATH     write monitoring results to a log file
     --log-format FORMAT log file format: text, tsv or jsonl (default: text)
+    --log-rotate daily  write a log file per day (monitor.log -> monitor-YYYY-MM-DD.log)
     --no-stdout         disable console output
     --stats-window N    use the last N attempts for RTT statistics (default: 1000)
     --stats-width N     use an 80- or 120-column statistics layout
@@ -39,6 +41,7 @@ defmodule NexPinger.CLI do
       strict: [
         log_file: :string,
         log_format: :string,
+        log_rotate: :string,
         no_stdout: :boolean,
         stats_window: :integer,
         stats_width: :integer,
@@ -66,11 +69,12 @@ defmodule NexPinger.CLI do
 
     validate_stats_options!(opts)
 
-    log_format =
-      case log_format(opts) do
-        {:ok, format} ->
-          format
-
+    log =
+      with {:ok, format} <- log_format(opts),
+           {:ok, rotate} <- log_rotate(opts) do
+        log_file = Keyword.get(opts, :log_file)
+        log_file && %{file: log_file, format: format, rotate: rotate}
+      else
         {:error, message} ->
           IO.puts(:stderr, message)
           System.halt(1)
@@ -81,7 +85,6 @@ defmodule NexPinger.CLI do
       System.halt(0)
     end
 
-    log_file = Keyword.get(opts, :log_file)
     stdout_enabled = not Keyword.get(opts, :no_stdout, false)
     stats_window = Keyword.get(opts, :stats_window, 1000)
     requested_stats_width = Keyword.get(opts, :stats_width)
@@ -96,7 +99,7 @@ defmodule NexPinger.CLI do
         System.halt(1)
 
       paths ->
-        run(paths, log_file, log_format, stdout_enabled, stats_window, requested_stats_width)
+        run(paths, log, stdout_enabled, stats_window, requested_stats_width)
     end
   end
 
@@ -124,7 +127,28 @@ defmodule NexPinger.CLI do
     end
   end
 
-  defp run(paths, log_file, log_format, stdout_enabled, stats_window, requested_stats_width) do
+  @doc """
+  Validates `--log-rotate` and returns the rotation. Error if given without `--log-file`.
+  """
+  @spec log_rotate(keyword()) :: {:ok, FileSubscriber.rotate()} | {:error, String.t()}
+  def log_rotate(opts) do
+    names = Enum.map(FileSubscriber.rotates(), &Atom.to_string/1)
+
+    case {Keyword.get(opts, :log_rotate), Keyword.get(opts, :log_file)} do
+      {nil, _log_file} ->
+        {:ok, nil}
+
+      {_rotate, nil} ->
+        {:error, "--log-rotate requires --log-file"}
+
+      {rotate, _log_file} ->
+        if rotate in names,
+          do: {:ok, String.to_existing_atom(rotate)},
+          else: {:error, "--log-rotate must be one of: #{Enum.join(names, ", ")}"}
+    end
+  end
+
+  defp run(paths, log, stdout_enabled, stats_window, requested_stats_width) do
     case load_hosts(paths) do
       {:ok, []} ->
         IO.puts(:stderr, "No hosts in config: #{Enum.join(paths, ", ")}")
@@ -149,8 +173,8 @@ defmodule NexPinger.CLI do
         stats_height = TerminalInput.terminal_height()
         interactive? = stdout_enabled and TerminalInput.available?()
 
-        if log_file do
-          start_log_file_subscriber(log_file, log_format, ResultLine.widths(hosts))
+        if log do
+          start_log_file_subscriber(log, ResultLine.widths(hosts))
         end
 
         ConsoleSubscriber.configure(hosts, stats_window, stats_width, stats_height)
@@ -159,8 +183,8 @@ defmodule NexPinger.CLI do
           "NexPinger (Elixir CUI) started: #{length(hosts)} hosts, #{item_count} items (#{Enum.join(paths, ", ")})"
         )
 
-        if log_file do
-          IO.puts("Log file: #{log_file} (#{log_format})")
+        if log do
+          IO.puts("Log file: #{log_file_description(log)}")
         end
 
         IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
@@ -307,13 +331,21 @@ defmodule NexPinger.CLI do
     end
   end
 
-  defp start_log_file_subscriber(log_file, log_format, widths) do
+  defp log_file_description(%{file: file, format: format, rotate: nil}), do: "#{file} (#{format})"
+
+  defp log_file_description(%{file: file, format: format, rotate: rotate}),
+    do: "#{FileSubscriber.file_path(file, rotate, Timestamp.now())} (#{format}, #{rotate})"
+
+  defp start_log_file_subscriber(%{file: file, format: format, rotate: rotate}, widths) do
     case Process.whereis(:log_file_subscriber) do
       nil ->
         # Checked here: a failing start_link would take this (linked) process down with it
-        case FileSubscriber.prepare(log_file, log_format) do
+        case FileSubscriber.prepare(
+               FileSubscriber.file_path(file, rotate, Timestamp.now()),
+               format
+             ) do
           :ok ->
-            FileSubscriber.start_link(log_file, :log_file_subscriber, nil, log_format, widths)
+            FileSubscriber.start_link(file, :log_file_subscriber, nil, format, widths, rotate)
             NexPinger.Broadcaster.subscribe(:log_file_subscriber)
 
           {:error, message} ->
