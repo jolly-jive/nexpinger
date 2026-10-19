@@ -2,6 +2,10 @@ defmodule NexPinger.Runner do
   @moduledoc """
   Monitors one Item on a host.
   One process per Item; probes every interval.
+
+  Probes start on a fixed schedule (start to start), so the probe time does not
+  add to the interval. A probe that runs past the next start skips the missed
+  starts instead of firing them in a burst.
   """
 
   use GenServer
@@ -11,7 +15,8 @@ defmodule NexPinger.Runner do
   @type state :: %{
           host: Host.t(),
           item: Item.t(),
-          interval: non_neg_integer()
+          interval: pos_integer(),
+          next_at: integer()
         }
 
   @spec start_link({Host.t(), Item.t()}) :: GenServer.on_start()
@@ -19,15 +24,11 @@ defmodule NexPinger.Runner do
     GenServer.start_link(__MODULE__, {host, item}, name: via_name(host.name, item.name))
   end
 
-  @spec probe(Host.t(), Item.t()) :: :ok
-  def probe(%Host{} = host, %Item{} = item) do
-    GenServer.cast(via_name(host.name, item.name), :probe)
-  end
-
   @impl true
   def init({%Host{} = host, %Item{} = item}) do
-    schedule_next(0)
-    {:ok, %{host: host, item: item, interval: item.interval}}
+    now = now()
+    schedule_at(now)
+    {:ok, %{host: host, item: item, interval: item.interval, next_at: now}}
   end
 
   @impl true
@@ -36,8 +37,9 @@ defmodule NexPinger.Runner do
     result = safe_probe(host.ip, item)
     host = %{host | mac_address: safe_mac(host.resolved)}
     Broadcaster.publish(host, item, result)
-    schedule_next(state.interval)
-    {:noreply, state}
+    next_at = next_start(state.next_at, state.interval, now())
+    schedule_at(next_at)
+    {:noreply, %{state | next_at: next_at}}
   end
 
   # A crash would restart the Runner; repeated crashes exhaust MonitorSupervisor and
@@ -61,9 +63,20 @@ defmodule NexPinger.Runner do
   # The result is one line on the console
   defp first_line(message), do: message |> String.split("\n", parts: 2) |> hd()
 
-  defp schedule_next(interval) do
-    Process.send_after(self(), :probe, interval)
+  # The first start at or after `now` on the grid `last_at + n * interval` (n >= 1)
+  @doc false
+  @spec next_start(integer(), pos_integer(), integer()) :: integer()
+  def next_start(last_at, interval, now) do
+    missed = div(max(now - last_at, 0) + interval - 1, interval)
+    last_at + max(missed, 1) * interval
   end
+
+  defp schedule_at(time) do
+    Process.send_after(self(), :probe, time, abs: true)
+  end
+
+  # Process.send_after/4 with abs: true takes this clock
+  defp now, do: System.monotonic_time(:millisecond)
 
   defp via_name(host_name, item_name) do
     {:via, Registry, {NexPinger.MonitorRegistry, {host_name, item_name}}}

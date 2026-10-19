@@ -117,6 +117,27 @@ defmodule NexPinger.RunnerTest do
     Process.exit(pid, :kill)
   end
 
+  describe "next_start/3" do
+    test "keeps the interval start to start when the probe is shorter than the interval" do
+      assert Runner.next_start(1000, 1000, 1000) == 2000
+      assert Runner.next_start(1000, 1000, 1350) == 2000
+      assert Runner.next_start(1000, 1000, 1999) == 2000
+    end
+
+    test "starts on time when the probe ends exactly at the next start" do
+      assert Runner.next_start(1000, 1000, 2000) == 2000
+    end
+
+    test "skips the starts missed by a long probe" do
+      assert Runner.next_start(1000, 1000, 2001) == 3000
+      assert Runner.next_start(1000, 1000, 4500) == 5000
+    end
+
+    test "never schedules before the last start" do
+      assert Runner.next_start(1000, 1000, 900) == 2000
+    end
+  end
+
   test "publishes to stdout and file subscribers at the same time" do
     host = %Host{
       name: "dual-output",
