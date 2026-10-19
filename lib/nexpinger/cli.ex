@@ -323,7 +323,7 @@ defmodule NexPinger.CLI do
         end
       end)
 
-    # Each file is checked on load; this catches names repeated across files
+    # Each file is checked on load; this catches host/item pairs repeated across files
     with {:ok, host_lists} <- result,
          hosts = host_lists |> Enum.reverse() |> List.flatten(),
          :ok <- Config.check_duplicates(hosts) do

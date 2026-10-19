@@ -27,25 +27,21 @@ defmodule NexPinger.Config do
   end
 
   @doc """
-  Host names must be unique, and Item names unique within a host:
-  {host name, Item name} identifies a monitor and its statistics.
+  {host name, Item name} identifies a monitor and its statistics, so each pair must be unique.
+  A host name may repeat with different Item names (e.g. one host per address family).
   """
   @spec check_duplicates([Host.t()]) :: :ok | {:error, String.t()}
   def check_duplicates(hosts) do
-    with :ok <- check_unique(Enum.map(hosts, & &1.name), "host name", "") do
-      Enum.reduce_while(hosts, :ok, fn host, :ok ->
-        case check_unique(Enum.map(host.items, & &1.name), "item name", " (host: #{inspect(host.name)})") do
-          :ok -> {:cont, :ok}
-          error -> {:halt, error}
-        end
-      end)
-    end
-  end
+    targets = for host <- hosts, item <- host.items, do: {host.name, item.name}
 
-  defp check_unique(names, label, context) do
-    case names -- Enum.uniq(names) do
-      [] -> :ok
-      [name | _] -> {:error, "Duplicate #{label}: #{inspect(name)}#{context}"}
+    case targets -- Enum.uniq(targets) do
+      [] ->
+        :ok
+
+      [{host_name, item_name} | _] ->
+        {:error,
+         "Duplicate item: #{inspect(item_name)} (host: #{inspect(host_name)}); " <>
+           "a host name and Item name pair must be unique"}
     end
   end
 
@@ -108,26 +104,33 @@ defmodule NexPinger.Config do
     content
     |> String.split(~r/\R/)
     |> Enum.with_index(1)
-    |> Enum.reduce_while({:ok, []}, &parse_hosts_line/2)
+    |> Enum.reduce_while({:ok, [], %{}}, &parse_hosts_line/2)
     |> case do
-      {:ok, hosts} -> {:ok, Enum.reverse(hosts)}
+      {:ok, hosts, _lines} -> {:ok, Enum.reverse(hosts)}
       error -> error
     end
   end
 
-  defp parse_hosts_line({line, line_number}, {:ok, hosts}) do
+  # Every host gets the Item "icmp", so a repeated name would repeat the monitor
+  defp parse_hosts_line({line, line_number}, {:ok, hosts, lines}) do
     case strip_comment(line) |> String.split() do
       [] ->
-        {:cont, {:ok, hosts}}
+        {:cont, {:ok, hosts, lines}}
 
       [address, name | _aliases] ->
-        case :inet.parse_address(String.to_charlist(address)) do
-          {:ok, _parsed_address} ->
+        case {:inet.parse_address(String.to_charlist(address)), lines[name]} do
+          {{:ok, _parsed_address}, nil} ->
             item = %Item{name: "icmp", type: :icmp}
             host = %Host{name: name, address: address, items: [item]}
-            {:cont, {:ok, [host | hosts]}}
+            {:cont, {:ok, [host | hosts], Map.put(lines, name, line_number)}}
 
-          {:error, _reason} ->
+          {{:ok, _parsed_address}, first_line} ->
+            {:halt,
+             {:error,
+              "Line #{line_number}: #{name} is already on line #{first_line}; " <>
+                "in a hosts-format file a name may appear on one line only"}}
+
+          {{:error, _reason}, _first_line} ->
             {:halt, {:error, "Line #{line_number}: not an IP address: #{address}"}}
         end
 

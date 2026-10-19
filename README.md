@@ -154,7 +154,7 @@ This writes results to the file and prints nothing to stdout.
 
 ## Config file
 
-YAML and `/etc/hosts` formats are detected from the content. In hosts format, each valid line's IP address and first host name become an ICMP check. Extra aliases point to the same host, so they are not separate checks. Interval and timeout use the Item defaults (1000 ms each). Use YAML for TCP / UDP checks and other settings.
+YAML and `/etc/hosts` formats are detected from the content. In hosts format, each valid line's IP address and first host name become an ICMP check. Extra aliases point to the same host, so they are not separate checks. Each check is named `icmp`, so a host name may appear on one line only (`127.0.0.1 localhost` and `::1 localhost` together are an error). Interval and timeout use the Item defaults (1000 ms each). Use YAML for TCP / UDP checks and other settings.
 
 ### YAML (`config/hosts.yml`)
 
@@ -203,7 +203,7 @@ hosts:
 - An unknown key is a config error, so a typo is not silently ignored
 - `port` is an integer from 1 to 65535. `interval` and `timeout` are integers from 1 to 86400000 (one day)
 - `name` and `address` are strings. A YAML number such as `name: 123` is an error; quote it (`name: "123"`)
-- Host names must be unique across all config files, and Item names unique within a host
+- Each pair of host name and Item name must be unique across all config files. A host name may repeat with other Item names, e.g. one host entry per address family
 
 ### ICMP checks
 

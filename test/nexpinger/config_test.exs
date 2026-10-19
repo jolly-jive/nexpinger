@@ -294,31 +294,51 @@ defmodule NexPinger.ConfigTest do
     assert Config.load(write_config!("hosts:\n")) == {:ok, []}
   end
 
-  test "rejects duplicate host names and item names within a host" do
+  test "rejects a duplicate host name and item name pair" do
+    for content <- [
+          """
+          hosts:
+            - {name: server, address: 192.0.2.1, items: [{name: web, type: tcp, port: 80}]}
+            - {name: server, address: 2001:db8::1, items: [{name: web, type: tcp, port: 80}]}
+          """,
+          """
+          hosts:
+            - name: server
+              address: 192.0.2.1
+              items: [{name: web, type: tcp, port: 80}, {name: web, type: tcp, port: 443}]
+          """
+        ] do
+      assert Config.load(write_config!(content)) ==
+               {:error,
+                ~s|Duplicate item: "web" (host: "server"); a host name and Item name pair must be unique|}
+    end
+  end
+
+  test "allows a host name to repeat with other item names, and item names on other hosts" do
     path =
       write_config!("""
       hosts:
-        - {name: server, address: 192.0.2.1, items: [{name: ping}]}
-        - {name: server, address: 192.0.2.2, items: [{name: ping}]}
+        - {name: server, address: 192.0.2.1, family: ipv4, items: [{name: ping4}]}
+        - {name: server, address: 2001:db8::1, family: ipv6, items: [{name: ping6}]}
+        - {name: other, address: 192.0.2.2, items: [{name: ping4}]}
       """)
 
-    assert Config.load(path) == {:error, ~s|Duplicate host name: "server"|}
+    assert {:ok, hosts} = Config.load(path)
 
-    path =
-      write_config!("""
-      hosts:
-        - name: server
-          address: 192.0.2.1
-          items: [{name: web, type: tcp, port: 80}, {name: web, type: tcp, port: 443}]
-        - name: other
-          address: 192.0.2.2
-          items: [{name: web, type: tcp, port: 80}]
-      """)
+    assert Enum.map(hosts, &{&1.name, hd(&1.items).name}) == [
+             {"server", "ping4"},
+             {"server", "ping6"},
+             {"other", "ping4"}
+           ]
+  end
 
-    assert Config.load(path) == {:error, ~s|Duplicate item name: "web" (host: "server")|}
+  test "hosts format allows a name on one line only" do
+    path = write_config!("127.0.0.1 localhost\n# comment\n\n::1 localhost ip6-localhost\n")
 
-    path = write_config!("127.0.0.1 localhost\n::1 localhost\n")
-    assert Config.load(path) == {:error, ~s|Duplicate host name: "localhost"|}
+    assert Config.load(path) ==
+             {:error,
+              "Line 4: localhost is already on line 1; " <>
+                "in a hosts-format file a name may appear on one line only"}
   end
 
   test "hosts format errors name the line" do
