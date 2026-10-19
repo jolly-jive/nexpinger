@@ -6,6 +6,8 @@ A CUI tool in Elixir that keeps monitoring many hosts over ICMP / TCP / UDP. On 
 
 Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool that pings many addresses.
 
+![NexPinger demo: streaming ping results, then the statistics screen via Tab](docs/demo/demo.gif)
+
 ## Features (so far)
 
 - Loads hosts and checks (Items) from a YAML config file

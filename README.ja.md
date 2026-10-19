@@ -6,6 +6,8 @@
 
 複数のアドレスへ ping を実行する Windows 用ツール [ExPing](https://www.woodybells.com/exping.html) に触発されて作りました。
 
+![NexPinger のデモ: Ping結果の追記表示と、Tab で切り替えた Ping統計](docs/demo/demo.gif)
+
 ## 機能（現時点）
 
 - YAML設定ファイルからホストと監視項目（Item）を読み込み
