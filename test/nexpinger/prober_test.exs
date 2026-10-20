@@ -14,6 +14,25 @@ defmodule NexPinger.ProberTest do
         :gen_tcp.close(listen)
       end
     end
+
+    test "reports a closed port as connection refused" do
+      {:ok, listen} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})
+      {:ok, port} = :inet.port(listen)
+      :gen_tcp.close(listen)
+      item = %Item{name: "tcp", type: :tcp, port: port, timeout: 1000}
+
+      assert Prober.probe({127, 0, 0, 1}, item) == {:error, "connection refused"}
+    end
+  end
+
+  describe "tcp_error_message/1" do
+    test "names common errors and inspects the rest" do
+      assert Prober.tcp_error_message(:econnrefused) == "connection refused"
+      assert Prober.tcp_error_message(:ehostunreach) == "host unreachable"
+      assert Prober.tcp_error_message(:enetunreach) == "network unreachable"
+      assert Prober.tcp_error_message(:timeout) == "timeout"
+      assert Prober.tcp_error_message(:eacces) == ":eacces"
+    end
   end
 
   describe "parse_ping_time/3 on Windows" do

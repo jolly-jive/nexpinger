@@ -229,7 +229,7 @@ A UDP check sends a request that makes the service reply, and **only checks whet
 
 - RTT is the time from sending the request to the first reply, including the server's processing time. With RD=0, a DNS resolver answers from its cache (or refuses) without recursing, so the RTT does not include recursion time
 - No reply within `timeout` is NG (`timeout`)
-- An ICMP Port Unreachable is not a UDP reply, so it is NG (`port unreachable`). This matches TCP, where a RST is NG. It may also come from a firewall (e.g. iptables `REJECT`) rather than the target itself
+- An ICMP Port Unreachable is not a UDP reply, so it is NG (`port unreachable`). This matches TCP, where a RST is NG (`connection refused`). It may also come from a firewall (e.g. iptables `REJECT`) rather than the target itself
 - Public NTP servers often rate-limit clients that poll too often, and may reply with Kiss-o'-Death or drop requests. So an NTP item's `interval` defaults to 8000 ms, and a warning is shown at startup if it is set under 8000 ms. Use 8000 ms or more for servers you don't run yourself
 
 ### hosts format

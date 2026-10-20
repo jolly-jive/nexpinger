@@ -159,7 +159,16 @@ defmodule NexPinger.Prober do
         {:ok, elapsed_us / 1000.0}
 
       {:error, reason} ->
-        {:error, inspect(reason)}
+        {:error, tcp_error_message(reason)}
     end
   end
+
+  # econnrefused: a RST came back, so the host is up but the port is closed
+  @doc false
+  @spec tcp_error_message(term()) :: String.t()
+  def tcp_error_message(:econnrefused), do: "connection refused"
+  def tcp_error_message(:ehostunreach), do: "host unreachable"
+  def tcp_error_message(:enetunreach), do: "network unreachable"
+  def tcp_error_message(:timeout), do: "timeout"
+  def tcp_error_message(reason), do: inspect(reason)
 end

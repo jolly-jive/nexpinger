@@ -229,7 +229,7 @@ UDP 監視では、サービスが応答する要求を送り、**応答の有�
 
 - RTT は要求の送信から最初の応答までの時間で、相手サーバの処理時間を含みます。RD=0 のため、DNS フルリゾルバは再帰問い合わせをせずキャッシュから応答（または拒否）し、RTT に再帰の時間は含まれません
 - `timeout` までに応答がなければ NG（`timeout`）です
-- ICMP Port Unreachable は UDP の応答ではないため NG（`port unreachable`）とします。TCP で RST を NG とするのと同じ扱いです。対象ホスト自身ではなくファイアウォール（iptables の `REJECT` など）が返すこともあります
+- ICMP Port Unreachable は UDP の応答ではないため NG（`port unreachable`）とします。TCP で RST を NG（`connection refused`）とするのと同じ扱いです。対象ホスト自身ではなくファイアウォール（iptables の `REJECT` など）が返すこともあります
 - 公開 NTP サーバの多くは問い合わせ頻度を制限しており、頻繁に問い合わせると Kiss-o'-Death を返したり要求を破棄したりします。そのため NTP の Item の `interval` は省略時 8000 ミリ秒とし、8000 ミリ秒未満を指定した場合は起動時に警告を表示します。自分で管理していないサーバには 8000 ミリ秒以上を指定してください
 
 ### hosts 形式
