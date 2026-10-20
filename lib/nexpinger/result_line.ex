@@ -9,10 +9,11 @@ defmodule NexPinger.ResultLine do
     * `-`: off-link
 
   The IP, item and port columns are as wide as the longest value of the hosts,
-  so nothing is cut. The host name comes last: its length varies most.
+  so nothing is cut. Widths are in terminal columns, so wide (e.g. Japanese)
+  names line up. The host name comes last: its length varies most.
   """
 
-  alias NexPinger.{Host, Item}
+  alias NexPinger.{DisplayWidth, Host, Item}
 
   @type widths :: %{ip: non_neg_integer(), item: non_neg_integer(), port: non_neg_integer()}
   @type target :: :console | :file
@@ -36,7 +37,7 @@ defmodule NexPinger.ResultLine do
   end
 
   defp max_length(values, label) do
-    values |> Enum.map(&String.length(label.(&1))) |> Enum.max(fn -> 0 end)
+    values |> Enum.map(&DisplayWidth.width(label.(&1))) |> Enum.max(fn -> 0 end)
   end
 
   @doc """
@@ -55,13 +56,13 @@ defmodule NexPinger.ResultLine do
     [
       timestamp,
       " ",
-      String.pad_trailing(ip(host), widths.ip),
+      DisplayWidth.pad_trailing(ip(host), widths.ip),
       " ",
-      String.pad_trailing(mac_label(host, target), @mac_width[target]),
+      DisplayWidth.pad_trailing(mac_label(host, target), @mac_width[target]),
       " ",
-      String.pad_trailing(item.name, widths.item),
+      DisplayWidth.pad_trailing(item.name, widths.item),
       " ",
-      String.pad_trailing(port_label(item), widths.port),
+      DisplayWidth.pad_trailing(port_label(item), widths.port),
       " ",
       status_tag(result, target),
       " ",
@@ -94,7 +95,7 @@ defmodule NexPinger.ResultLine do
   defp detail({:ok, rtt_ms}), do: :io_lib.format("~8.2f ms", [rtt_ms])
 
   defp detail({:error, reason}) when is_binary(reason),
-    do: String.pad_trailing(reason, @detail_width)
+    do: DisplayWidth.pad_trailing(reason, @detail_width)
 
   defp detail({:error, reason}), do: detail({:error, inspect(reason)})
 end

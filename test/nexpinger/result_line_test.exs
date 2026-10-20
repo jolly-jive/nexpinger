@@ -37,5 +37,37 @@ defmodule NexPinger.ResultLineTest do
     test "is all zero without hosts" do
       assert ResultLine.widths([]) == %{ip: 0, item: 0, port: 0}
     end
+
+    test "counts wide characters as two columns" do
+      ping = %Item{name: "死活", type: :icmp}
+      https = %Item{name: "https", type: :tcp, port: 443}
+      host = %Host{name: "本社", address: "192.0.2.1", items: [ping, https]}
+
+      assert ResultLine.widths([host]).item == 5
+      assert ResultLine.widths([%{host | items: [%{ping | name: "死活監視"}]}]).item == 8
+    end
+  end
+
+  describe "format/6" do
+    test "lines up the columns after a wide item name" do
+      wide = %Item{name: "死活監視", type: :icmp}
+      ascii = %Item{name: "https", type: :tcp, port: 443}
+      host = %Host{name: "本社", address: "192.0.2.1", items: [wide, ascii]}
+      widths = ResultLine.widths([host])
+
+      [wide_line, ascii_line] =
+        for item <- [wide, ascii] do
+          "12:00:00.000"
+          |> ResultLine.format(host, item, {:ok, 1.0}, widths, :file)
+          |> IO.iodata_to_binary()
+        end
+
+      column = fn line ->
+        [head, _] = String.split(line, ["icmp", "443/tcp"], parts: 2)
+        NexPinger.DisplayWidth.width(head)
+      end
+
+      assert column.(wide_line) == column.(ascii_line)
+    end
   end
 end

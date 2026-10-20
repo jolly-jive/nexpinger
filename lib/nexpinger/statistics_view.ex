@@ -1,11 +1,12 @@
 defmodule NexPinger.StatisticsView do
   @moduledoc """
   Builds the fixed-width text of the stats screen.
+  Widths are in terminal columns, so wide (e.g. Japanese) names line up.
   """
 
-  alias NexPinger.{ResultLine, Statistics}
+  alias NexPinger.{DisplayWidth, ResultLine, Statistics}
 
-  # {column widths, column separator}
+  # {column widths, column separator}; each layout adds up to its screen width
   @layouts %{
     80 => {[22, 6, 6, 5, 6, 9, 6, 6, 6], " "},
     120 => {[41, 6, 8, 8, 6, 11, 8, 8, 8], "  "}
@@ -36,7 +37,7 @@ defmodule NexPinger.StatisticsView do
       String.duplicate("-", width)
     ]
 
-    row_lines = Enum.map(displayed, &format_entry(&1, layout, width))
+    row_lines = Enum.map(displayed, &format_entry(&1, layout))
 
     footer =
       "Rows #{if entries == [], do: 0, else: offset + 1}-#{finish} of #{length(entries)} | TAB: Ping Results | Up/Down: scroll | Q: quit"
@@ -49,7 +50,7 @@ defmodule NexPinger.StatisticsView do
     max(entry_count - max(height - 5, 1), 0)
   end
 
-  defp format_entry(entry, {widths, separator} = layout, width) do
+  defp format_entry(entry, {widths, separator}) do
     latency = Statistics.latency(entry)
     attempts = entry.attempts
 
@@ -81,12 +82,15 @@ defmodule NexPinger.StatisticsView do
       format_optional_number(latency.p99, Enum.at(widths, 8))
     ]
 
-    row = values |> format_row(layout) |> fit(width)
+    cells = fit_cells(values, widths)
 
-    case entry.latest do
-      {:error, _reason} -> paint_ng(row, widths, separator)
-      _ -> row
-    end
+    cells =
+      case entry.latest do
+        {:error, _reason} -> List.update_at(cells, @latest, &paint_ng/1)
+        _ -> cells
+      end
+
+    Enum.join(cells, separator)
   end
 
   # The MAC state of the latest attempt
@@ -94,20 +98,20 @@ defmodule NexPinger.StatisticsView do
   defp mac_label(%{host: host}), do: ResultLine.mac_label(host, :console)
 
   # Colors after padding, so ANSI codes do not count toward the width.
-  defp paint_ng(row, widths, separator) do
-    start = (widths |> Enum.take(@latest) |> Enum.sum()) + @latest * String.length(separator)
-    {head, "NG" <> tail} = String.split_at(row, start)
-    head <> IO.ANSI.red() <> "NG" <> IO.ANSI.reset() <> tail
-  end
+  defp paint_ng("NG" <> padding), do: IO.ANSI.red() <> "NG" <> IO.ANSI.reset() <> padding
 
   defp target_label(host_name, item_name, nil), do: "#{host_name}/#{item_name}"
   defp target_label(host_name, item_name, port), do: "#{host_name}/#{item_name}:#{port}"
 
   defp format_row(values, {widths, separator}) do
+    values |> fit_cells(widths) |> Enum.join(separator)
+  end
+
+  defp fit_cells(values, widths) do
     values
     |> Enum.zip(widths)
     |> Enum.zip(@alignments)
-    |> Enum.map_join(separator, fn {{value, width}, alignment} -> fit(value, width, alignment) end)
+    |> Enum.map(fn {{value, width}, alignment} -> fit(value, width, alignment) end)
   end
 
   defp format_optional_number(nil, _width), do: "-"
@@ -145,13 +149,14 @@ defmodule NexPinger.StatisticsView do
     )
   end
 
+  # A wide character that does not fit before the "~" leaves a space after it.
   defp fit(value, width, alignment \\ :left) do
-    if String.length(value) > width do
-      String.slice(value, 0, width - 1) <> "~"
+    if DisplayWidth.width(value) > width do
+      DisplayWidth.pad_trailing(DisplayWidth.take(value, width - 1) <> "~", width)
     else
       case alignment do
-        :right -> String.pad_leading(value, width)
-        :left -> String.pad_trailing(value, width)
+        :right -> DisplayWidth.pad_leading(value, width)
+        :left -> DisplayWidth.pad_trailing(value, width)
       end
     end
   end

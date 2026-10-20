@@ -105,4 +105,35 @@ defmodule NexPinger.StatisticsViewTest do
       assert String.length(String.replace(row, red_ng, "NG")) == width
     end
   end
+
+  test "fits wide target names in the column width" do
+    item = %Item{name: "死活監視", type: :icmp}
+
+    hosts =
+      for name <- ["本社", "本社サーバ大阪第二データセンター"],
+          do: %Host{name: name, address: "192.0.2.1", items: [item]}
+
+    statistics = Statistics.new(hosts, 1000)
+    statistics = Statistics.record(statistics, hd(hosts), item, {:error, :timeout})
+
+    for width <- [80, 120] do
+      lines = StatisticsView.render(statistics, width, 24, 0) |> String.split("\r\n", trim: true)
+      red_ng = IO.ANSI.red() <> "NG" <> IO.ANSI.reset()
+
+      assert Enum.all?(
+               lines,
+               &(NexPinger.DisplayWidth.width(String.replace(&1, red_ng, "NG")) == width)
+             )
+
+      assert Enum.at(lines, 3) =~ red_ng
+    end
+
+    [_, _, _, _, long] =
+      StatisticsView.render(statistics, 80, 24, 0)
+      |> String.split("\r\n", trim: true)
+      |> Enum.take(5)
+
+    # 10 wide characters and "~" take 21 of 22 columns; a space fills the last
+    assert long =~ "本社サーバ大阪第二デ~  - "
+  end
 end
