@@ -6,12 +6,12 @@ defmodule NexPinger.LauncherTest do
   describe "parse_parent_pid/1" do
     test "takes the ppid field" do
       stat = "4242 (beam.smp) S 4241 4241 4000 34816 4241 4194560 1 2 3\n"
-      assert Launcher.parse_parent_pid(stat) == {:ok, "4241"}
+      assert Launcher.parse_parent_pid(stat) == {:ok, 4241}
     end
 
     test "allows spaces and parentheses in the process name" do
       stat = "4242 (my (odd) name) R 17 4242 4000 0 -1 4194560\n"
-      assert Launcher.parse_parent_pid(stat) == {:ok, "17"}
+      assert Launcher.parse_parent_pid(stat) == {:ok, 17}
     end
 
     test "rejects broken input" do
@@ -23,7 +23,7 @@ defmodule NexPinger.LauncherTest do
 
   describe "watch" do
     setup do
-      {:ok, agent} = Agent.start_link(fn -> {:ok, "100"} end)
+      {:ok, agent} = Agent.start_link(fn -> {:ok, 100} end)
       test_pid = self()
 
       opts = [
@@ -45,7 +45,7 @@ defmodule NexPinger.LauncherTest do
     test "calls on_exit when the parent PID changes", %{agent: agent, opts: opts} do
       {:ok, _watcher} = Launcher.start_link(opts)
 
-      Agent.update(agent, fn _ -> {:ok, "1"} end)
+      Agent.update(agent, fn _ -> {:ok, 1} end)
       assert_receive :launcher_gone, 500
     end
 

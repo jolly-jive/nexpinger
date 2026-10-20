@@ -103,30 +103,17 @@ defmodule NexPinger.ConsoleSubscriber do
   def handle_cast({:scroll, _direction}, state), do: {:noreply, state}
 
   @impl true
-  def handle_info({:item_result, %Host{} = host, %Item{} = item, {:ok, rtt_ms}}, state) do
-    state = record_result(state, host, item, {:ok, rtt_ms})
+  def handle_info({:item_result, %Host{} = host, %Item{} = item, {status, _} = result}, state)
+      when status in [:ok, :error] do
+    if status == :error, do: IO.write("\a")
+
+    state = record_result(state, host, item, result)
 
     state =
       if state.mode == :stats do
         schedule_stats_render(state)
       else
-        print_result(host, item, {:ok, rtt_ms}, state.widths)
-        state
-      end
-
-    {:noreply, state}
-  end
-
-  def handle_info({:item_result, %Host{} = host, %Item{} = item, {:error, reason}}, state) do
-    IO.write("\a")
-
-    state = record_result(state, host, item, {:error, reason})
-
-    state =
-      if state.mode == :stats do
-        schedule_stats_render(state)
-      else
-        print_result(host, item, {:error, reason}, state.widths)
+        print_result(host, item, result, state.widths)
         state
       end
 

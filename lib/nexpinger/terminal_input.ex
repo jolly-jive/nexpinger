@@ -192,8 +192,14 @@ defmodule NexPinger.TerminalInput do
 
   defp windows?, do: match?({:win32, _}, :os.type())
 
-  defp input_loop(read) do
-    case read.() do
+  @doc """
+  Reads stats screen keys until q, Q, Ctrl+C or the input ends (`:quit`).
+  Tab toggles the view; k/j and the up/down arrow keys scroll.
+  """
+  def input_loop(read), do: handle_input(read.(), read)
+
+  defp handle_input(input, read) do
+    case input do
       {:ok, <<9>>} ->
         ConsoleSubscriber.toggle_view()
         input_loop(read)
@@ -203,7 +209,6 @@ defmodule NexPinger.TerminalInput do
 
       {:ok, <<27>>} ->
         handle_escape(read)
-        input_loop(read)
 
       {:ok, <<?k>>} ->
         ConsoleSubscriber.scroll(:up)
@@ -224,16 +229,27 @@ defmodule NexPinger.TerminalInput do
     end
   end
 
+  # Up/down arrows are ESC [ A / ESC [ B. A key that does not continue the sequence
+  # is handled as a key of its own, so a lone ESC does not swallow the next key.
   defp handle_escape(read) do
-    with {:ok, <<"[">>} <- read.(),
-         {:ok, direction} <- read.() do
-      case direction do
-        <<?A>> -> ConsoleSubscriber.scroll(:up)
-        <<?B>> -> ConsoleSubscriber.scroll(:down)
-        _ -> :ok
-      end
-    else
-      _ -> :ok
+    case read.() do
+      {:ok, <<"[">>} -> handle_escape_sequence(read)
+      input -> handle_input(input, read)
+    end
+  end
+
+  defp handle_escape_sequence(read) do
+    case read.() do
+      {:ok, <<?A>>} ->
+        ConsoleSubscriber.scroll(:up)
+        input_loop(read)
+
+      {:ok, <<?B>>} ->
+        ConsoleSubscriber.scroll(:down)
+        input_loop(read)
+
+      input ->
+        handle_input(input, read)
     end
   end
 

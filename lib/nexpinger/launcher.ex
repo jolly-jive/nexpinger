@@ -35,13 +35,13 @@ defmodule NexPinger.Launcher do
   end
 
   @doc """
-  Takes the ppid field of /proc/PID/stat: "PID (COMM) STATE PPID ...".
+  Takes the ppid field of /proc/PID/stat: "PID (COMM) STATE PPID ...", as an integer.
   COMM may contain spaces and parentheses, so split at the last ")".
   """
   def parse_parent_pid(stat) do
     with [_ | _] = parts <- String.split(stat, ")"),
          [_state, ppid | _] <- parts |> List.last() |> String.split(),
-         {_pid, ""} <- Integer.parse(ppid) do
+         {ppid, ""} <- Integer.parse(ppid) do
       {:ok, ppid}
     else
       _ -> {:error, :no_parent_pid}
