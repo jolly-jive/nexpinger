@@ -54,7 +54,7 @@ defmodule NexPinger.ConsoleSubscriberTest do
     {:ok, state} = ConsoleSubscriber.init([])
 
     {:reply, :ok, state} =
-      ConsoleSubscriber.handle_call({:configure, [web, gateway], 1000, 80, 24}, self(), state)
+      ConsoleSubscriber.handle_call({:configure, [web, gateway], 1000, nil}, self(), state)
 
     output =
       capture_io(fn ->
@@ -91,7 +91,7 @@ defmodule NexPinger.ConsoleSubscriberTest do
   end
 
   test "hides the cursor while the statistics view is shown" do
-    {:ok, state} = ConsoleSubscriber.init([])
+    {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> {80, 24} end)
 
     {{:noreply, state}, enter} =
       with_io(fn -> ConsoleSubscriber.handle_cast(:toggle_view, state) end)
@@ -140,5 +140,80 @@ defmodule NexPinger.ConsoleSubscriberTest do
     output = capture_io(fn -> ConsoleSubscriber.handle_info(:render_stats, state) end)
 
     assert output == ""
+  end
+
+  test "reads the terminal size when the statistics view opens" do
+    {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> {100, 30} end)
+
+    {{:noreply, state}, frame} =
+      with_io(fn -> ConsoleSubscriber.handle_cast(:toggle_view, state) end)
+
+    assert {state.stats_width, state.stats_height} == {100, 30}
+    assert frame =~ String.duplicate("-", 100) <> "\e[K\r\n"
+    assert_receive {:check_size, ref}, 1000
+    assert ref == state.size_check
+  end
+
+  test "redraws from a cleared screen when the terminal size changes" do
+    hosts =
+      for index <- 1..30 do
+        %Host{
+          name: "host-#{index}",
+          address: "192.0.2.1",
+          items: [%Item{name: "ping", type: :icmp}]
+        }
+      end
+
+    {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> {120, 40} end)
+
+    {:reply, :ok, state} =
+      ConsoleSubscriber.handle_call({:configure, hosts, 1000, nil}, self(), state)
+
+    ref = make_ref()
+
+    state = %{
+      state
+      | mode: :stats,
+        size_check: ref,
+        stats_width: 80,
+        stats_height: 10,
+        offset: 25
+    }
+
+    {{:noreply, state}, frame} =
+      with_io(fn -> ConsoleSubscriber.handle_info({:check_size, ref}, state) end)
+
+    assert {state.stats_width, state.stats_height} == {120, 40}
+    assert state.offset == 0
+    assert String.starts_with?(frame, "\e[2J\e[H")
+    assert frame =~ String.duplicate("-", 120)
+    assert state.size_check != ref
+    assert_receive {:check_size, new_ref}, 1000
+    assert new_ref == state.size_check
+  end
+
+  test "keeps a fixed width and skips redraws while the size stays the same" do
+    {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> {120, 24} end)
+
+    {:reply, :ok, state} =
+      ConsoleSubscriber.handle_call({:configure, [], 1000, 80}, self(), state)
+
+    ref = make_ref()
+    state = %{state | mode: :stats, size_check: ref}
+
+    {{:noreply, state}, output} =
+      with_io(fn -> ConsoleSubscriber.handle_info({:check_size, ref}, state) end)
+
+    assert output == ""
+    assert state.stats_width == 80
+  end
+
+  test "ignores a size check scheduled before the statistics view was left" do
+    {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> flunk("size read") end)
+
+    assert {:noreply, ^state} = ConsoleSubscriber.handle_info({:check_size, make_ref()}, state)
+
+    state = %{state | mode: :stats, size_check: make_ref()}
+    assert {:noreply, ^state} = ConsoleSubscriber.handle_info({:check_size, make_ref()}, state)
   end
 end

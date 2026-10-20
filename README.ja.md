@@ -113,7 +113,7 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux_x
 - `--log-rotate daily`: ログファイルを日ごとに分ける（後述）。`--log-file` と併せて指定する（単独指定はエラー）
 - `--no-stdout`: コンソールへの出力を抑止
 - `--stats-window N`: 平均・P95・P99 を計算する直近試行数（既定値1000、1以上）
-- `--stats-width N`: 統計画面の幅（80または120桁、省略時は端末幅から選択）
+- `--stats-width N`: 統計画面の幅を固定（80〜120桁）。省略時は端末幅（80〜120桁に制限）に合わせ、リサイズにも追従
 - `--ping-command`: ICMP ソケット（Linux）や `icmp_helper.exe`（Windows）を使わず、常に OS の `ping` コマンドで ICMP 監視を行う
 - `--version`: バージョンを表示
 - `--help`: ヘルプを表示

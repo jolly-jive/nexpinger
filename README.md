@@ -113,7 +113,7 @@ ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-nexpinger MIX_ENV=prod BURRITO_TARGET=linux_x
 - `--log-rotate daily`: write a log file per day (see below). Requires `--log-file`
 - `--no-stdout`: no console output
 - `--stats-window N`: number of recent attempts for average / P95 / P99 (default 1000, min 1)
-- `--stats-width N`: stats screen width (80 or 120 columns; picked from the terminal width if omitted)
+- `--stats-width N`: fixed stats screen width (80-120 columns). If omitted, the terminal width within 80-120, following resizes
 - `--ping-command`: always use the OS `ping` command for ICMP, not the ICMP socket (Linux) or `icmp_helper.exe` (Windows)
 - `--version`: show the version
 - `--help`: show help

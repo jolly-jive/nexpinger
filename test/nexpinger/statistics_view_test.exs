@@ -16,6 +16,39 @@ defmodule NexPinger.StatisticsViewTest do
     end
   end
 
+  test "fills every width from 80 to 120 columns" do
+    item = %Item{name: "死活監視", type: :icmp}
+    host = %Host{name: "本社サーバ大阪第二データセンター", address: "192.0.2.1", items: [item]}
+    statistics = Statistics.new([host], 1000) |> Statistics.record(host, item, {:error, :timeout})
+    red_ng = IO.ANSI.red() <> "NG" <> IO.ANSI.reset()
+
+    for width <- 80..120 do
+      lines = StatisticsView.render(statistics, width, 24, 0) |> String.split("\r\n", trim: true)
+
+      assert Enum.all?(
+               lines,
+               &(NexPinger.DisplayWidth.width(String.replace(&1, red_ng, "NG")) == width)
+             )
+    end
+  end
+
+  test "widens Target first, then the number columns, then the separators" do
+    statistics = Statistics.new([], 1000)
+
+    header = fn width ->
+      StatisticsView.render(statistics, width, 24, 0) |> String.split("\r\n") |> Enum.at(1)
+    end
+
+    assert header.(99) ==
+             "Target                                    MAC      Runs  Fail  Loss% Latest       Avg    P95    P99"
+
+    assert header.(112) ==
+             "Target                                    MAC        Runs     Fail  Loss% Latest           Avg      P95      P99"
+
+    assert header.(115) ==
+             "Target                                     MAC         Runs      Fail  Loss% Latest           Avg      P95      P99"
+  end
+
   test "limits displayed rows and clamps the scroll offset" do
     hosts =
       for index <- 1..30 do

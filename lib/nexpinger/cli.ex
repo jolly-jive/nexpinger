@@ -26,7 +26,7 @@ defmodule NexPinger.CLI do
     --log-rotate daily  write a log file per day (monitor.log -> monitor-YYYY-MM-DD.log)
     --no-stdout         disable console output
     --stats-window N    use the last N attempts for RTT statistics (default: 1000)
-    --stats-width N     use an 80- or 120-column statistics layout
+    --stats-width N     fix the statistics screen width (80-120; default: terminal width)
     --ping-command      always use the OS ping command for ICMP
     --version           show the version
     --help              show this help message
@@ -177,15 +177,13 @@ defmodule NexPinger.CLI do
     networks = OnLink.networks()
     hosts = Enum.map(hosts, &%{&1 | on_link: OnLink.on_link?(&1.ip, networks)})
 
-    stats_width = requested_stats_width || TerminalInput.terminal_width()
-    stats_height = TerminalInput.terminal_height()
     interactive? = stdout_enabled and TerminalInput.available?()
 
     if log do
       start_log_file_subscriber(log, ResultLine.widths(hosts))
     end
 
-    ConsoleSubscriber.configure(hosts, stats_window, stats_width, stats_height)
+    ConsoleSubscriber.configure(hosts, stats_window, requested_stats_width)
     print_banner(hosts, paths, log, stdout_enabled, address_warnings)
 
     if stdout_enabled do
@@ -306,8 +304,8 @@ defmodule NexPinger.CLI do
         IO.puts(:stderr, "--stats-window must be >= 1")
         System.halt(1)
 
-      not is_nil(stats_width) and stats_width not in [80, 120] ->
-        IO.puts(:stderr, "--stats-width must be 80 or 120")
+      not is_nil(stats_width) and stats_width not in 80..120 ->
+        IO.puts(:stderr, "--stats-width must be 80-120")
         System.halt(1)
 
       true ->

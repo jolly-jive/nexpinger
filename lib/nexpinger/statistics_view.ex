@@ -6,19 +6,23 @@ defmodule NexPinger.StatisticsView do
 
   alias NexPinger.{DisplayWidth, ResultLine, Statistics}
 
-  # {column widths, column separator}; each layout adds up to its screen width
-  @layouts %{
-    80 => {[22, 6, 6, 5, 6, 9, 6, 6, 6], " "},
-    120 => {[41, 6, 8, 8, 6, 11, 8, 8, 8], "  "}
-  }
+  # The 80-column layout. Wider screens (up to 120) widen Target to 41 first,
+  # then one number column per column (@number_steps), then the separators from
+  # the left to two spaces; 120 columns are 41,6,8,8,6,11,8,8,8 with "  ".
+  @min_width 80
+  @base_widths [22, 6, 6, 5, 6, 9, 6, 6, 6]
+  @target_max_width 41
+  # Column indexes: Avg, P95, P99, Latest, Runs, Fail, twice, then Fail again
+  @number_steps [6, 7, 8, 5, 2, 3, 6, 7, 8, 5, 2, 3, 3]
+  @separator_count 8
 
   @alignments [:left, :left, :right, :right, :right, :left, :right, :right, :right]
   # Index of the Latest column
   @latest 5
 
-  @spec render(map(), 80 | 120, pos_integer(), non_neg_integer()) :: String.t()
-  def render(statistics, width, height, offset) when width in [80, 120] do
-    layout = Map.fetch!(@layouts, width)
+  @spec render(map(), 80..120, pos_integer(), non_neg_integer()) :: String.t()
+  def render(statistics, width, height, offset) when width in 80..120 do
+    layout = layout(width)
     entries = Statistics.entries(statistics)
     visible_rows = max(height - 5, 1)
     displayed = entries |> Enum.drop(offset) |> Enum.take(visible_rows)
@@ -45,12 +49,36 @@ defmodule NexPinger.StatisticsView do
     Enum.join(lines ++ row_lines ++ [fit(footer, width)], "\r\n") <> "\r\n"
   end
 
-  @spec max_offset(non_neg_integer(), 80 | 120, pos_integer()) :: non_neg_integer()
-  def max_offset(entry_count, width, height) when width in [80, 120] do
+  @spec max_offset(non_neg_integer(), 80..120, pos_integer()) :: non_neg_integer()
+  def max_offset(entry_count, width, height) when width in 80..120 do
     max(entry_count - max(height - 5, 1), 0)
   end
 
-  defp format_entry(entry, {widths, separator}) do
+  # {column widths, separators}
+  defp layout(width) do
+    extra = width - @min_width
+    target_extra = min(extra, @target_max_width - hd(@base_widths))
+    number_extra = min(extra - target_extra, length(@number_steps))
+    separator_extra = extra - target_extra - number_extra
+
+    widths =
+      @number_steps
+      |> Enum.take(number_extra)
+      |> Enum.reduce(List.update_at(@base_widths, 0, &(&1 + target_extra)), fn index, widths ->
+        List.update_at(widths, index, &(&1 + 1))
+      end)
+
+    separators =
+      for index <- 1..@separator_count, do: if(index <= separator_extra, do: "  ", else: " ")
+
+    {widths, separators}
+  end
+
+  defp join_cells(cells, separators) do
+    cells |> Enum.zip_with(separators ++ [""], &(&1 <> &2)) |> Enum.join()
+  end
+
+  defp format_entry(entry, {widths, separators}) do
     latency = Statistics.latency(entry)
     attempts = entry.attempts
 
@@ -90,7 +118,7 @@ defmodule NexPinger.StatisticsView do
         _ -> cells
       end
 
-    Enum.join(cells, separator)
+    join_cells(cells, separators)
   end
 
   # The MAC state of the latest attempt
@@ -103,8 +131,8 @@ defmodule NexPinger.StatisticsView do
   defp target_label(host_name, item_name, nil), do: "#{host_name}/#{item_name}"
   defp target_label(host_name, item_name, port), do: "#{host_name}/#{item_name}:#{port}"
 
-  defp format_row(values, {widths, separator}) do
-    values |> fit_cells(widths) |> Enum.join(separator)
+  defp format_row(values, {widths, separators}) do
+    values |> fit_cells(widths) |> join_cells(separators)
   end
 
   defp fit_cells(values, widths) do

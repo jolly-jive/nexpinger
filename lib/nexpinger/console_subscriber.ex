@@ -5,13 +5,15 @@ defmodule NexPinger.ConsoleSubscriber do
 
   use GenServer
 
-  alias NexPinger.{Host, Item, ResultLine, Statistics, StatisticsView, Timestamp}
+  alias NexPinger.{Host, Item, ResultLine, Statistics, StatisticsView, TerminalInput, Timestamp}
 
   @default_stats_window 1000
   @default_stats_width 80
   @default_stats_height 24
   # Stats redraw interval (ms). Redraw on this timer, not per result.
   @stats_render_interval 100
+  # Terminal size check interval (ms) while the stats screen is shown
+  @size_check_interval 500
 
   # Stats screen uses the alternate screen buffer and hides the cursor
   @enter_stats_screen "\e[?1049h\e[?25l\e[2J\e[H"
@@ -29,8 +31,12 @@ defmodule NexPinger.ConsoleSubscriber do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  def configure(hosts, stats_window, stats_width, stats_height \\ @default_stats_height) do
-    GenServer.call(__MODULE__, {:configure, hosts, stats_window, stats_width, stats_height})
+  @doc """
+  Sets the hosts and the stats options. `fixed_width` (80..120) keeps the stats
+  screen width; with nil it follows the terminal.
+  """
+  def configure(hosts, stats_window, fixed_width \\ nil) do
+    GenServer.call(__MODULE__, {:configure, hosts, stats_window, fixed_width})
   end
 
   def toggle_view, do: GenServer.cast(__MODULE__, :toggle_view)
@@ -38,12 +44,16 @@ defmodule NexPinger.ConsoleSubscriber do
   def end_stats_view, do: GenServer.call(__MODULE__, :end_stats_view)
 
   @impl true
-  def init(_opts) do
+  # `:stats_size` (test hook): 0-arity fun returning `{width, height}`
+  def init(opts) do
     {:ok,
      %{
        statistics: Statistics.new([], @default_stats_window),
+       stats_size: Keyword.get(opts, :stats_size, &TerminalInput.stats_size/0),
+       fixed_width: nil,
        stats_width: @default_stats_width,
        stats_height: @default_stats_height,
+       size_check: nil,
        widths: ResultLine.widths([]),
        mode: :results,
        offset: 0,
@@ -53,23 +63,20 @@ defmodule NexPinger.ConsoleSubscriber do
   end
 
   @impl true
-  def handle_call({:configure, hosts, stats_window, stats_width, stats_height}, _from, state) do
+  def handle_call({:configure, hosts, stats_window, fixed_width}, _from, state) do
     statistics = Statistics.new(hosts, stats_window)
 
     {:reply, :ok,
      %{
        state
        | statistics: statistics,
-         stats_width: stats_width,
-         stats_height: stats_height,
+         fixed_width: fixed_width,
          widths: ResultLine.widths(hosts)
      }}
   end
 
   def handle_call(:end_stats_view, _from, %{mode: :stats} = state) do
-    IO.write(@leave_stats_screen)
-    :persistent_term.put(@stats_view, false)
-    {:reply, :ok, %{state | mode: :results}}
+    {:reply, :ok, leave_stats(state)}
   end
 
   def handle_call(:end_stats_view, _from, state), do: {:reply, :ok, state}
@@ -78,22 +85,18 @@ defmodule NexPinger.ConsoleSubscriber do
   def handle_cast(:toggle_view, %{mode: :results} = state) do
     IO.write(@enter_stats_screen)
     :persistent_term.put(@stats_view, true)
+    state = state |> read_stats_size() |> schedule_size_check()
     state = render_stats(%{state | mode: :stats, offset: 0})
     {:noreply, state}
   end
 
   def handle_cast(:toggle_view, %{mode: :stats} = state) do
-    IO.write(@leave_stats_screen)
-    :persistent_term.put(@stats_view, false)
-    {:noreply, %{state | mode: :results}}
+    {:noreply, leave_stats(state)}
   end
 
   def handle_cast({:scroll, direction}, %{mode: :stats} = state) do
     direction_offset = if direction == :down, do: 1, else: -1
-    entry_count = length(Statistics.entries(state.statistics))
-    max_offset = StatisticsView.max_offset(entry_count, state.stats_width, state.stats_height)
-    offset = min(max(state.offset + direction_offset, 0), max_offset)
-    state = render_stats(%{state | offset: offset})
+    state = render_stats(clamp_offset(%{state | offset: state.offset + direction_offset}))
     {:noreply, state}
   end
 
@@ -130,6 +133,24 @@ defmodule NexPinger.ConsoleSubscriber do
     {:noreply, state}
   end
 
+  # A changed size redraws from a cleared screen, so nothing of the old layout stays.
+  def handle_info({:check_size, ref}, %{mode: :stats, size_check: ref} = state) do
+    size = {state.stats_width, state.stats_height}
+    state = state |> read_stats_size() |> schedule_size_check()
+
+    state =
+      if {state.stats_width, state.stats_height} == size do
+        state
+      else
+        IO.write("\e[2J")
+        render_stats(clamp_offset(state))
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:check_size, _ref}, state), do: {:noreply, state}
+
   def handle_info(:render_stats, state) do
     state = %{state | render_scheduled: false}
 
@@ -137,6 +158,30 @@ defmodule NexPinger.ConsoleSubscriber do
       if state.mode == :stats and state.stats_dirty, do: render_stats(state), else: state
 
     {:noreply, state}
+  end
+
+  defp leave_stats(state) do
+    IO.write(@leave_stats_screen)
+    :persistent_term.put(@stats_view, false)
+    %{state | mode: :results, size_check: nil}
+  end
+
+  defp read_stats_size(state) do
+    {width, height} = state.stats_size.()
+    %{state | stats_width: state.fixed_width || width, stats_height: height}
+  end
+
+  # The ref in the message drops a check scheduled before leaving and re-entering the view.
+  defp schedule_size_check(state) do
+    ref = make_ref()
+    Process.send_after(self(), {:check_size, ref}, @size_check_interval)
+    %{state | size_check: ref}
+  end
+
+  defp clamp_offset(state) do
+    entry_count = length(Statistics.entries(state.statistics))
+    max_offset = StatisticsView.max_offset(entry_count, state.stats_width, state.stats_height)
+    %{state | offset: state.offset |> max(0) |> min(max_offset)}
   end
 
   defp record_result(state, host, item, result) do

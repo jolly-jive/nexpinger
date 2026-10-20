@@ -27,17 +27,14 @@ defmodule NexPinger.TerminalInput do
     _error -> false
   end
 
-  def terminal_width do
+  @doc """
+  The stats screen size, `{width, height}`: the terminal columns kept within
+  80..120, and the rows. 80x24 when the size is unknown.
+  """
+  def stats_size do
     case terminal_size() do
-      {_rows, columns} when columns >= 120 -> 120
-      _ -> 80
-    end
-  end
-
-  def terminal_height do
-    case terminal_size() do
-      {rows, _columns} when rows > 0 -> rows
-      _ -> 24
+      {rows, columns} when rows > 0 and columns > 0 -> {columns |> max(80) |> min(120), rows}
+      _ -> {80, 24}
     end
   end
 
