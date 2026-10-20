@@ -116,6 +116,14 @@ defmodule NexPinger.ProberTest do
     end
   end
 
+  describe "enforce_timeout/2" do
+    test "turns a reply slower than the timeout into a timeout" do
+      assert Prober.enforce_timeout({:ok, 5.0}, 1) == {:error, "timeout"}
+      assert Prober.enforce_timeout({:ok, 1.0}, 1) == {:ok, 1.0}
+      assert Prober.enforce_timeout({:error, "no reply"}, 1) == {:error, "no reply"}
+    end
+  end
+
   describe "icmp_socket_method/1" do
     @denied {:error, "permission denied"}
 

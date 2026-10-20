@@ -85,10 +85,17 @@ defmodule NexPinger.Prober do
       end
 
     case result do
-      {:error, :unavailable} -> ping_command_probe(address, timeout)
-      result -> result
+      {:error, :unavailable} -> address |> ping_command_probe(timeout) |> enforce_timeout(timeout)
+      result -> enforce_timeout(result, timeout)
     end
   end
+
+  # ping.exe and IcmpSendEcho2 can report replies later than the timeout, and Linux ping -W
+  # is rounded up to whole seconds, so a reply slower than the timeout counts as a timeout.
+  @doc false
+  @spec enforce_timeout(result(), non_neg_integer()) :: result()
+  def enforce_timeout({:ok, rtt_ms}, timeout_ms) when rtt_ms > timeout_ms, do: {:error, "timeout"}
+  def enforce_timeout(result, _timeout_ms), do: result
 
   defp ping_command_probe(address, timeout) do
     case System.find_executable("ping") do
