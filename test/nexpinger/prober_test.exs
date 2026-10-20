@@ -115,4 +115,59 @@ defmodule NexPinger.ProberTest do
       assert Prober.parse_ping_time(output, {:unix, :linux}, "127.0.0.1") == {:ok, 0.045}
     end
   end
+
+  describe "icmp_socket_method/1" do
+    @denied {:error, "permission denied"}
+
+    test "names one method when every family has the same availability" do
+      assert Prober.icmp_socket_method(ipv4: :ok, ipv6: :ok) == "ICMP socket"
+      assert Prober.icmp_socket_method(ipv6: :ok) == "ICMP socket"
+
+      assert Prober.icmp_socket_method(ipv4: @denied, ipv6: @denied) ==
+               "ping command (fallback: permission denied)"
+    end
+
+    test "names the method per family when they differ" do
+      no_ipv6 = {:error, "the kernel does not support IPv6"}
+
+      assert Prober.icmp_socket_method(ipv4: :ok, ipv6: no_ipv6) ==
+               "IPv4: ICMP socket; IPv6: ping command (fallback: the kernel does not support IPv6)"
+
+      assert Prober.icmp_socket_method(ipv4: @denied, ipv6: no_ipv6) ==
+               "IPv4: ping command (fallback: permission denied); " <>
+                 "IPv6: ping command (fallback: the kernel does not support IPv6)"
+    end
+  end
+
+  if match?({:unix, _}, :os.type()) do
+    describe "run_command/4" do
+      test "returns the output and exit status" do
+        assert Prober.run_command("/bin/sh", ["-c", "echo out; echo err >&2; exit 3"], [], 5000) ==
+                 {:ok, "out\nerr\n", 3}
+      end
+
+      test "passes the environment" do
+        assert {:ok, "C\n", 0} =
+                 Prober.run_command(
+                   "/bin/sh",
+                   ["-c", "echo $LC_ALL"],
+                   [{~c"LC_ALL", ~c"C"}],
+                   5000
+                 )
+      end
+
+      @tag :tmp_dir
+      test "kills the process on timeout", %{tmp_dir: tmp_dir} do
+        pid_file = Path.join(tmp_dir, "pid")
+        script = "echo $$ > #{pid_file}; exec sleep 30"
+
+        assert Prober.run_command("/bin/sh", ["-c", script], [], 300) == :timeout
+
+        os_pid = pid_file |> File.read!() |> String.trim()
+        Process.sleep(100)
+        assert {_output, status} = System.cmd("kill", ["-0", os_pid], stderr_to_stdout: true)
+        assert status != 0
+      end
+    end
+  end
 end

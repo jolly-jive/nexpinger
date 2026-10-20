@@ -21,19 +21,18 @@ defmodule NexPinger.Prober do
     do: UdpProbe.probe(ip, item.service, item.port, item.timeout)
 
   @doc """
-  Returns the ICMP method used here, for the startup message.
+  Returns the ICMP method used here for the given target families, for the startup message.
   """
-  @spec icmp_method() :: String.t()
-  def icmp_method do
+  @spec icmp_method([Resolver.ip_family()]) :: String.t()
+  def icmp_method(families) do
     case {ping_command_forced?(), :os.type()} do
       {true, _os} ->
         "ping command (forced by --ping-command)"
 
       {_, {:unix, :linux}} ->
-        case IcmpSocket.availability() do
-          :ok -> "ICMP socket"
-          {:error, reason} -> "ping command (fallback: #{reason})"
-        end
+        families
+        |> Enum.map(&{&1, IcmpSocket.availability(Resolver.socket_family(&1))})
+        |> icmp_socket_method()
 
       {_, {:win32, _}} ->
         case IcmpHelper.availability() do
@@ -45,6 +44,24 @@ defmodule NexPinger.Prober do
         "ping command"
     end
   end
+
+  # Per family only when the families differ, e.g. IPv6 disabled in the kernel
+  @doc false
+  @spec icmp_socket_method([{Resolver.ip_family(), :ok | {:error, String.t()}}]) :: String.t()
+  def icmp_socket_method(availabilities) do
+    case Enum.uniq_by(availabilities, &elem(&1, 1)) do
+      [{_family, availability}] ->
+        socket_method(availability)
+
+      _differ ->
+        Enum.map_join(availabilities, "; ", fn {family, availability} ->
+          "#{Resolver.family_name(family)}: #{socket_method(availability)}"
+        end)
+    end
+  end
+
+  defp socket_method(:ok), do: "ICMP socket"
+  defp socket_method({:error, reason}), do: "ping command (fallback: #{reason})"
 
   @doc """
   Always use the OS ping command, not the ICMP socket or helper (`--ping-command`).
@@ -74,27 +91,94 @@ defmodule NexPinger.Prober do
   end
 
   defp ping_command_probe(address, timeout) do
-    args = icmp_args(address, timeout)
-
-    task = Task.async(fn -> System.cmd("ping", args, ping_cmd_opts()) end)
-
-    case Task.yield(task, timeout + 500) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {output, 0}} ->
-        parse_ping_time(output, :os.type(), address)
-
-      {:ok, {_output, _exit_code}} ->
-        {:error, "unreachable"}
-
+    case System.find_executable("ping") do
       nil ->
-        {:error, "timeout"}
+        {:error, "ping command not found"}
+
+      path ->
+        case run_command(path, icmp_args(address, timeout), ping_env(), timeout + 500) do
+          {:ok, output, 0} -> parse_ping_time(output, :os.type(), address)
+          {:ok, _output, _exit_code} -> {:error, "unreachable"}
+          :timeout -> {:error, "timeout"}
+        end
     end
   end
 
   # Unix: force English and "." decimals (LANG may localize "time=" or print "0,045")
-  defp ping_cmd_opts do
+  defp ping_env do
     case :os.type() do
-      {:unix, _} -> [stderr_to_stdout: true, env: [{"LC_ALL", "C"}]]
-      _ -> [stderr_to_stdout: true]
+      {:unix, _} -> [{~c"LC_ALL", ~c"C"}]
+      _ -> []
+    end
+  end
+
+  # Like System.cmd/3 with a deadline. On timeout the OS process is killed,
+  # since closing the port only closes its pipes and leaves the process running.
+  @doc false
+  @spec run_command(String.t(), [String.t()], [{charlist(), charlist()}], non_neg_integer()) ::
+          {:ok, binary(), non_neg_integer()} | :timeout
+  def run_command(path, args, env, timeout_ms) do
+    port =
+      Port.open({:spawn_executable, path}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        :hide,
+        args: args,
+        env: env
+      ])
+
+    os_pid =
+      case Port.info(port, :os_pid) do
+        {:os_pid, os_pid} -> os_pid
+        nil -> nil
+      end
+
+    collect_output(port, os_pid, System.monotonic_time(:millisecond) + timeout_ms, [])
+  end
+
+  defp collect_output(port, os_pid, deadline, acc) do
+    remaining_ms = max(0, deadline - System.monotonic_time(:millisecond))
+
+    receive do
+      {^port, {:data, data}} -> collect_output(port, os_pid, deadline, [acc | data])
+      {^port, {:exit_status, status}} -> {:ok, IO.iodata_to_binary(acc), status}
+    after
+      remaining_ms ->
+        if os_pid, do: kill_os_process(os_pid)
+        close_port(port)
+        :timeout
+    end
+  end
+
+  defp kill_os_process(os_pid) do
+    {command, args} =
+      case :os.type() do
+        {:win32, _} -> {"taskkill", ["/F", "/PID", Integer.to_string(os_pid)]}
+        _ -> {"kill", ["-KILL", Integer.to_string(os_pid)]}
+      end
+
+    if path = System.find_executable(command) do
+      System.cmd(path, args, stderr_to_stdout: true)
+    end
+
+    :ok
+  end
+
+  # The port may have closed on its own; drop any messages it already sent
+  defp close_port(port) do
+    Port.close(port)
+  rescue
+    ArgumentError -> :ok
+  after
+    flush_port(port)
+  end
+
+  defp flush_port(port) do
+    receive do
+      {^port, _message} -> flush_port(port)
+    after
+      0 -> :ok
     end
   end
 

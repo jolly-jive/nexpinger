@@ -34,18 +34,18 @@ defmodule NexPinger.IcmpSocket do
   end
 
   @doc """
-  Checks whether ICMP sockets work (opens and closes an IPv4 socket).
+  Checks whether ICMP sockets of `family` work (opens and closes one).
   Returns the reason if not.
   """
-  @spec availability() :: :ok | {:error, String.t()}
-  def availability do
-    case open_socket(:inet) do
+  @spec availability(:inet | :inet6) :: :ok | {:error, String.t()}
+  def availability(family) do
+    case open_socket(family) do
       {:ok, socket} ->
         :socket.close(socket)
         :ok
 
       {:error, reason} ->
-        {:error, unavailable_reason(reason)}
+        {:error, unavailable_reason(reason, family)}
     end
   end
 
@@ -66,17 +66,21 @@ defmodule NexPinger.IcmpSocket do
     _kind, _reason -> {:error, :socket_not_supported}
   end
 
-  defp unavailable_reason(reason) when reason in [:eacces, :eperm],
+  # net.ipv4.ping_group_range also covers ICMPv6 sockets
+  defp unavailable_reason(reason, _family) when reason in [:eacces, :eperm],
     do: "permission denied; net.ipv4.ping_group_range does not include this user's groups"
 
-  defp unavailable_reason(reason)
+  defp unavailable_reason(:eafnosupport, :inet6), do: "the kernel does not support IPv6"
+
+  defp unavailable_reason(reason, _family)
        when reason in [:eprotonosupport, :eafnosupport, :esocktnosupport],
        do: "the kernel does not support ICMP datagram sockets"
 
-  defp unavailable_reason(:socket_not_supported),
+  defp unavailable_reason(:socket_not_supported, _family),
     do: "this Erlang/OTP runtime does not support :socket"
 
-  defp unavailable_reason(reason), do: "cannot open an ICMP socket (#{inspect(reason)})"
+  defp unavailable_reason(reason, _family),
+    do: "cannot open an ICMP socket (#{inspect(reason)})"
 
   defp echo(socket, family, ip, timeout_ms) do
     seq = :rand.uniform(0x10000) - 1

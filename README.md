@@ -17,7 +17,7 @@ Inspired by [ExPing](https://www.woodybells.com/exping.html), a Windows tool tha
     (to enable: `sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`)
   - Windows: sends via a helper (`priv/bin/icmp_helper.exe`) that calls `IcmpSendEcho2` / `Icmp6SendEcho2`. If the helper is missing or can't run, falls back to `ping.exe` (parsed independently of the display language)
   - Other OSes: runs the OS `ping` command
-  - Shows the method in use (and any fallback reason) at startup as `ICMP: ...`
+  - Shows the method in use (and any fallback reason) at startup as `ICMP: ...`, per address family when IPv4 and IPv6 differ (e.g. `ICMP: IPv4: ICMP socket; IPv6: ping command (fallback: ...)`)
 - TCP ping (checks `:gen_tcp.connect` and measures the RTT; see [TCP checks](#tcp-checks))
 - UDP ping (sends a DNS / NTP / QUIC request and waits for any reply; see [UDP checks](#udp-checks))
 - Streams one line per result (ok in green / NG in red)

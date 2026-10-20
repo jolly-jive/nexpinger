@@ -17,7 +17,7 @@
     （有効にする例: `sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`）
   - Windows: `IcmpSendEcho2` / `Icmp6SendEcho2` を呼ぶ補助プログラム（`priv/bin/icmp_helper.exe`）で送信。補助プログラムが無い・実行できない場合は `ping.exe` にフォールバック（表示言語に依存しない方法で結果を読み取る）
   - その他の OS: OS の `ping` コマンドを実行
-  - 起動時に使用する方法（とフォールバックの理由）を `ICMP: ...` として表示
+  - 起動時に使用する方法（とフォールバックの理由）を `ICMP: ...` として表示。IPv4 と IPv6 で異なる場合はアドレスファミリーごとに表示（例: `ICMP: IPv4: ICMP socket; IPv6: ping command (fallback: ...)`）
 - TCP Ping（`:gen_tcp.connect` で疎通とRTTを計測。[TCP 監視](#tcp-監視)を参照）
 - UDP Ping（DNS / NTP / QUIC の要求を送り、応答の有無を確認。[UDP 監視](#udp-監視)を参照）
 - 1行1項目のストリーム出力（成功=緑 ok / 失敗=赤 NG）

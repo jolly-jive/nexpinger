@@ -208,8 +208,13 @@ defmodule NexPinger.CLI do
 
     IO.puts("stdout: #{if stdout_enabled, do: "enabled", else: "disabled"}")
 
-    if Enum.any?(hosts, fn host -> Enum.any?(host.items, &(&1.type == :icmp)) end) do
-      IO.puts("ICMP: #{Prober.icmp_method()}")
+    icmp_families =
+      for host <- hosts, Enum.any?(host.items, &(&1.type == :icmp)), uniq: true do
+        Resolver.ip_family(host.ip)
+      end
+
+    if icmp_families != [] do
+      IO.puts("ICMP: #{Prober.icmp_method(Enum.sort(icmp_families))}")
     end
 
     Enum.each(resolved_messages(hosts), &IO.puts/1)

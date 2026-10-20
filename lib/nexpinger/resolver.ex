@@ -6,6 +6,7 @@ defmodule NexPinger.Resolver do
   """
 
   @type family :: :ipv4 | :ipv6 | :auto
+  @type ip_family :: :ipv4 | :ipv6
 
   @spec resolve(String.t(), family()) ::
           {:ok, [:inet.ip_address(), ...]} | {:error, String.t()}
@@ -45,7 +46,7 @@ defmodule NexPinger.Resolver do
     end
   end
 
-  @spec ip_family(:inet.ip_address()) :: :ipv4 | :ipv6
+  @spec ip_family(:inet.ip_address()) :: ip_family()
   def ip_family(ip) when tuple_size(ip) == 4, do: :ipv4
   def ip_family(ip) when tuple_size(ip) == 8, do: :ipv6
 
