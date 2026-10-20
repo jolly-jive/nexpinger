@@ -1,14 +1,16 @@
 defmodule NexPinger.MacResolver do
   @moduledoc """
   Looks up the MAC address of an IP in the OS neighbor table (ARP / NDP).
-  Only on-link hosts are in the table, so others get nil.
+  Only on-link hosts are in the table; `NexPinger.Runner` looks up only hosts
+  that `NexPinger.OnLink` says are on-link.
     * Linux: `ip neigh show <ip>` (IPv4 and IPv6)
     * Windows: the helper (`NexPinger.IcmpHelper.mac/1`), else `arp -a` (IPv4 only)
     * Other: nil
 
   Results, nil included, are cached per IP for 15 s. Items of a host share one lookup,
-  and off-link hosts don't run a command on every probe. 15 s is the shortest
-  REACHABLE time of Linux and Windows, so the cache adds little to the OS's own delay.
+  and an on-link host without an entry doesn't run a command on every probe. 15 s is
+  the shortest REACHABLE time of Linux and Windows, so the cache adds little to the
+  OS's own delay.
   """
 
   use GenServer

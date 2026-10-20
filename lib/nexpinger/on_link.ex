@@ -5,7 +5,8 @@ defmodule NexPinger.OnLink do
   neighbor entry.
 
   The subnet is taken from the interface's address and netmask. An IPv6 on-link
-  prefix that differs from it (e.g. a /128 address) is not seen.
+  prefix that differs from it (e.g. a /128 address) is not seen; such hosts count as
+  off-link, so their MAC is not looked up.
   """
 
   @type network :: {address :: :inet.ip_address(), netmask :: :inet.ip_address()}

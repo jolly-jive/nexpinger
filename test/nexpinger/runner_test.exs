@@ -117,6 +117,31 @@ defmodule NexPinger.RunnerTest do
     Process.exit(pid, :kill)
   end
 
+  test "looks up the MAC of on-link hosts only" do
+    Broadcaster.subscribe(self())
+
+    # The probe raises (unknown type) and never touches the network; the MAC lookup
+    # still runs. Each resolved IP is unique, so its MacResolver cache entry tells.
+    for {on_link, resolved} <- [{false, "192.0.2.141"}, {true, "192.0.2.142"}] do
+      host = %Host{
+        name: "mac-lookup-#{on_link}",
+        address: resolved,
+        ip: {127, 0, 0, 1},
+        resolved: resolved,
+        on_link: on_link,
+        items: []
+      }
+
+      item = %Item{name: "bogus", type: :bogus, interval: 5000, timeout: 100}
+      {:ok, pid} = Runner.start_link({host, item})
+      assert_receive {:item_result, %Host{name: "mac-lookup-" <> _}, ^item, _result}, 1000
+      Process.unlink(pid)
+      Process.exit(pid, :kill)
+
+      assert match?([_], :ets.lookup(NexPinger.MacResolver, resolved)) == on_link
+    end
+  end
+
   describe "next_start/3" do
     test "keeps the interval start to start when the probe is shorter than the interval" do
       assert Runner.next_start(1000, 1000, 1000) == 2000

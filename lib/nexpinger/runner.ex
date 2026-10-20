@@ -35,7 +35,7 @@ defmodule NexPinger.Runner do
   def handle_info(:probe, %{host: host, item: item} = state) do
     # The IP is fixed at startup; only the MAC is looked up per probe
     result = safe_probe(host.ip, item)
-    host = %{host | mac_address: safe_mac(host.resolved)}
+    host = %{host | mac_address: safe_mac(host)}
     Broadcaster.publish(host, item, result)
     next_at = next_start(state.next_at, state.interval, now())
     schedule_at(next_at)
@@ -52,7 +52,10 @@ defmodule NexPinger.Runner do
     kind, reason -> {:error, first_line(Exception.format_banner(kind, reason))}
   end
 
-  defp safe_mac(ip) do
+  # Off-link hosts have no neighbor entry, so they are not looked up
+  defp safe_mac(%Host{on_link: false}), do: nil
+
+  defp safe_mac(%Host{resolved: ip}) do
     MacResolver.lookup(ip)
   rescue
     _error -> nil
