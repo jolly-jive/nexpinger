@@ -179,4 +179,168 @@ defmodule NexPinger.CLITest do
     assert {:error, message} = NexPinger.CLI.log_rotate(log_rotate: "daily")
     assert message =~ "--log-file"
   end
+
+  describe "parse/1" do
+    test "returns the settings" do
+      assert {:ok, settings} =
+               NexPinger.CLI.parse([
+                 "--log-file",
+                 "monitor.tsv",
+                 "--log-format",
+                 "tsv",
+                 "--no-stdout",
+                 "--stats-window",
+                 "250",
+                 "--stats-width",
+                 "100",
+                 "--ping-command",
+                 "a.yml",
+                 "b.yml"
+               ])
+
+      assert settings == %{
+               paths: ["a.yml", "b.yml"],
+               log: %{file: "monitor.tsv", format: :tsv, rotate: nil},
+               stdout_enabled: false,
+               stats_window: 250,
+               stats_width: 100,
+               ping_command: true
+             }
+    end
+
+    test "defaults" do
+      assert {:ok, settings} = NexPinger.CLI.parse(["hosts.yml"])
+
+      assert settings == %{
+               paths: ["hosts.yml"],
+               log: nil,
+               stdout_enabled: true,
+               stats_window: 1000,
+               stats_width: nil,
+               ping_command: false
+             }
+    end
+
+    test "rejects invalid options with the usage" do
+      assert {:error, message} = NexPinger.CLI.parse(["--unknown", "--bad", "hosts.yml"])
+      assert message =~ ~r/\AInvalid option: --unknown, --bad\nUsage: nexpinger/
+    end
+
+    test "shows the version before checking other options" do
+      assert {:version, version} = NexPinger.CLI.parse(["--version", "--stats-width", "10"])
+      assert version == NexPinger.CLI.version_string()
+    end
+
+    test "shows the help without a config file" do
+      assert {:help, usage} = NexPinger.CLI.parse(["--help"])
+      assert usage =~ "Usage: nexpinger"
+    end
+
+    test "checks the options before showing the help" do
+      assert {:error, "--stats-width must be 80-120"} =
+               NexPinger.CLI.parse(["--help", "--stats-width", "10"])
+    end
+
+    test "rejects a stats window under 1" do
+      assert {:error, "--stats-window must be >= 1"} =
+               NexPinger.CLI.parse(["--stats-window", "0", "hosts.yml"])
+    end
+
+    test "rejects a stats width outside 80-120" do
+      for width <- ["79", "121"] do
+        assert {:error, "--stats-width must be 80-120"} =
+                 NexPinger.CLI.parse(["--stats-width", width, "hosts.yml"])
+      end
+    end
+
+    test "rejects log options without a log file" do
+      assert {:error, "--log-format requires --log-file"} =
+               NexPinger.CLI.parse(["--log-format", "tsv", "hosts.yml"])
+
+      assert {:error, "--log-rotate requires --log-file"} =
+               NexPinger.CLI.parse(["--log-rotate", "daily", "hosts.yml"])
+    end
+
+    test "requires a config file" do
+      assert {:error, "No config file given"} = NexPinger.CLI.parse(["--no-stdout"])
+    end
+  end
+
+  describe "prepare/2" do
+    @describetag :tmp_dir
+
+    test "returns the resolved hosts and warnings", %{tmp_dir: tmp_dir} do
+      path = write!(tmp_dir, "hosts", "127.0.0.1 local\n192.0.2.1 remote\n")
+      resolve = fn address, _family -> {:ok, [address |> to_charlist() |> parse_ip()]} end
+
+      assert {:ok, plan} = NexPinger.CLI.prepare(settings([path]), resolve)
+      assert Enum.map(plan.hosts, & &1.resolved) == ["127.0.0.1", "192.0.2.1"]
+      assert plan.address_warnings == []
+      assert plan.settings == settings([path])
+    end
+
+    test "reports a config file that cannot be loaded", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "missing.yml")
+
+      assert NexPinger.CLI.prepare(settings([path])) ==
+               {:error,
+                "Failed to load config: #{path}: Cannot read file: no such file or directory"}
+    end
+
+    test "reports config files without hosts", %{tmp_dir: tmp_dir} do
+      path = write!(tmp_dir, "empty", "# no hosts\n")
+
+      assert NexPinger.CLI.prepare(settings([path])) ==
+               {:error, "No hosts in config: #{path}"}
+    end
+
+    test "reports a target repeated across files", %{tmp_dir: tmp_dir} do
+      first = write!(tmp_dir, "first", "127.0.0.1 local\n")
+      second = write!(tmp_dir, "second", "127.0.0.2 local\n")
+
+      assert {:error, "Failed to load config: " <> _} =
+               NexPinger.CLI.prepare(settings([first, second]))
+    end
+
+    test "reports every host that cannot be resolved", %{tmp_dir: tmp_dir} do
+      path = write!(tmp_dir, "hosts", "192.0.2.1 a\n192.0.2.2 b\n")
+      resolve = fn _address, _family -> {:error, "unknown host"} end
+
+      assert {:error, message} = NexPinger.CLI.prepare(settings([path]), resolve)
+      assert [a, b] = String.split(message, "\n")
+      assert a =~ "Cannot resolve a: 192.0.2.1"
+      assert b =~ "Cannot resolve b: 192.0.2.2"
+    end
+
+    test "reports a log file that cannot be opened", %{tmp_dir: tmp_dir} do
+      path = write!(tmp_dir, "hosts", "127.0.0.1 local\n")
+      # A directory cannot be opened for appending
+      log = %{file: tmp_dir, format: :text, rotate: nil}
+
+      assert {:error, "Cannot open log file: " <> _} =
+               NexPinger.CLI.prepare(%{settings([path]) | log: log})
+    end
+  end
+
+  defp settings(paths) do
+    %{
+      paths: paths,
+      log: nil,
+      stdout_enabled: true,
+      stats_window: 1000,
+      stats_width: nil,
+      ping_command: false
+    }
+  end
+
+  defp write!(dir, name, content) do
+    path = Path.join(dir, name)
+    File.write!(path, content)
+    path
+  end
+
+  defp parse_ip(address) do
+    {:ok, ip} = :inet.parse_address(address)
+    ip
+  end
 end
