@@ -6,7 +6,7 @@ defmodule NexPinger.ConsoleSubscriber do
   `subscribe: true`, so a restarted subscriber gets its settings back and subscribes to the
   Broadcaster again. The statistics start over.
 
-  If the terminal stops taking output (a selection in a Windows console, Ctrl+S, a stopped pipe),
+  If the terminal stops taking output (a selection in a conhost window, Ctrl+S, a stopped pipe),
   the Broadcaster drops results once 1000 wait. When output moves again, each target gets a
   `DROPPED` line, and the stats screen title shows the total: those results are not counted.
   """

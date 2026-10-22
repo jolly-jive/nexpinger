@@ -123,7 +123,7 @@ Without `--log-file`, nothing is written to a file.
 
 If the log file cannot be created at startup, NexPinger exits with an error. If a write fails while running (e.g. a full disk), monitoring continues and those results are not saved; stderr reports when writes start failing and when they succeed again.
 
-If writes are so slow that 100,000 results wait (e.g. a stalled network share), results are dropped until the file catches up. Each target then gets one record with the status `dropped`, and stderr reports the total. The console does the same after 1,000 waiting results (e.g. while text is selected in a Windows console, or after Ctrl+S): each target gets a `DROPPED` line with the count and the time of the first dropped result, and the stats screen title shows `Dropped: N`, since those results are not in the statistics. Monitoring itself is never held up.
+If writes are so slow that 100,000 results wait (e.g. a stalled network share), results are dropped until the file catches up. Each target then gets one record with the status `dropped`, and stderr reports the total. The console does the same after 1,000 waiting results (e.g. while text is selected in a classic Windows console window (conhost, QuickEdit mode; Windows Terminal keeps running), or after Ctrl+S): each target gets a `DROPPED` line with the count and the time of the first dropped result, and the stats screen title shows `Dropped: N`, since those results are not in the statistics. Monitoring itself is never held up.
 
 The log file is opened for each line, so it can be rotated from outside: move or delete it, and the next result creates a new file (with the header for TSV). With logrotate, the default `create` mode works; no `copytruncate` or signal is needed:
 
