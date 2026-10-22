@@ -3,7 +3,7 @@ defmodule NexPinger.FileSubscriberTest do
 
   import ExUnit.CaptureIO
 
-  alias NexPinger.{FileSubscriber, Host, Item, Timestamp}
+  alias NexPinger.{FileSubscriber, Host, Item}
 
   @timestamp "2026-09-30 12:00:00.123"
   @widths %{ip: 0, item: 0, port: 0}
@@ -120,9 +120,8 @@ defmodule NexPinger.FileSubscriberTest do
     end
 
     @tag :tmp_dir
-    test "writes to today's file", %{tmp_dir: tmp_dir} do
+    test "writes to the file of the result's date", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "monitor.tsv")
-      before = FileSubscriber.file_path(path, :daily, Timestamp.now())
 
       {:ok, state} =
         FileSubscriber.init(
@@ -133,14 +132,15 @@ defmodule NexPinger.FileSubscriberTest do
           rotate: :daily
         )
 
-      FileSubscriber.handle_info({:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}, state)
-      after_ = FileSubscriber.file_path(path, :daily, Timestamp.now())
+      # A result taken before midnight goes to that day's file, even when written after it
+      result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}, "2026-09-30 23:59:59.999"}
+      FileSubscriber.handle_info(result, state)
 
-      # Either side of midnight
-      assert_received {:file_written, written}
-      assert written in [before, after_]
+      written = Path.join(tmp_dir, "monitor-2026-09-30.tsv")
+      assert_received {:file_written, ^written}
       refute File.exists?(path)
-      assert [_header, _row] = written |> File.read!() |> String.split("\n", trim: true)
+      assert [_header, row] = written |> File.read!() |> String.split("\n", trim: true)
+      assert String.starts_with?(row, "2026-09-30 23:59:59.999\t")
     end
   end
 
@@ -165,7 +165,7 @@ defmodule NexPinger.FileSubscriberTest do
       # Let the Broadcaster handle the restarted subscriber's subscribe
       :sys.get_state(NexPinger.Broadcaster)
 
-      NexPinger.Broadcaster.publish(icmp_host(), icmp_item(), {:ok, 1.5})
+      NexPinger.Broadcaster.publish(icmp_host(), icmp_item(), {:ok, 1.5}, @timestamp)
       assert_receive {:file_written, ^path}
     end
   end
@@ -181,6 +181,63 @@ defmodule NexPinger.FileSubscriberTest do
     end
   end
 
+  describe "dropped results" do
+    @dropped {:dropped, 42, "2026-09-30 11:59:00.000"}
+
+    test "are one record with the status dropped in every format" do
+      assert record(:text, icmp_host(), icmp_item(), @dropped) ==
+               "2026-09-30 12:00:00.123 192.0.2.1 -                 ping icmp DROPPED 42 results since 2026-09-30 11:59:00.000  gateway\n"
+
+      assert record(:tsv, icmp_host(), icmp_item(), @dropped) ==
+               "2026-09-30 12:00:00.123\tgateway\t192.0.2.1\t\t\tping\ticmp\t\tdropped\t\t42 results dropped since 2026-09-30 11:59:00.000\n"
+
+      assert %{
+               "status" => "dropped",
+               "rtt_ms" => nil,
+               "error" => "42 results dropped since " <> _
+             } =
+               JSON.decode!(record(:jsonl, icmp_host(), icmp_item(), @dropped))
+    end
+
+    @tag :tmp_dir
+    test "are written per target, with the total on stderr", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "monitor.tsv")
+
+      {:ok, state} =
+        FileSubscriber.init(path: path, format: :tsv, owner: self(), widths: @widths)
+
+      drops = [
+        %{
+          host: icmp_host(),
+          item: icmp_item(),
+          count: 3,
+          first_at: "2026-09-30 11:59:00.000",
+          last_at: "2026-09-30 11:59:02.000"
+        },
+        %{
+          host: tcp_host(),
+          item: tcp_item(),
+          count: 2,
+          first_at: "2026-09-30 11:59:01.000",
+          last_at: "2026-09-30 11:59:03.000"
+        }
+      ]
+
+      stderr =
+        capture_io(:stderr, fn -> FileSubscriber.handle_info({:results_dropped, drops}, state) end)
+
+      assert stderr =~
+               "Log file fell behind: 5 results dropped from 2026-09-30 11:59:00.000 to 2026-09-30 11:59:03.000"
+
+      assert [_header, gateway, web] = path |> File.read!() |> String.split("\n", trim: true)
+
+      assert gateway =~
+               ~r/^2026-09-30 11:59:02\.000\tgateway\t.*\tdropped\t\t3 results dropped since 2026-09-30 11:59:00\.000$/
+
+      assert web =~ ~r/^2026-09-30 11:59:03\.000\tweb\t.*\tdropped\t\t2 results dropped since/
+    end
+  end
+
   describe "file output" do
     @describetag :tmp_dir
 
@@ -188,7 +245,12 @@ defmodule NexPinger.FileSubscriberTest do
       path = Path.join(tmp_dir, "monitor.tsv")
 
       {:ok, state} = FileSubscriber.init(path: path, format: :tsv, widths: @widths)
-      FileSubscriber.handle_info({:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}, state)
+
+      FileSubscriber.handle_info(
+        {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}, @timestamp},
+        state
+      )
+
       {:ok, _state} = FileSubscriber.init(path: path, format: :tsv, widths: @widths)
 
       [header | rows] = path |> File.read!() |> String.split("\n", trim: true)
@@ -203,7 +265,7 @@ defmodule NexPinger.FileSubscriberTest do
     test "recreates a moved file, with the TSV header", %{tmp_dir: tmp_dir} do
       path = Path.join([tmp_dir, "logs", "monitor.tsv"])
       {:ok, state} = FileSubscriber.init(path: path, format: :tsv, widths: @widths)
-      result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}
+      result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}, @timestamp}
       FileSubscriber.handle_info(result, state)
 
       File.rename!(Path.dirname(path), Path.join(tmp_dir, "old"))
@@ -246,7 +308,7 @@ defmodule NexPinger.FileSubscriberTest do
       {:ok, state} =
         FileSubscriber.init(path: path, format: :text, owner: self(), widths: @widths)
 
-      result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}}
+      result = {:item_result, icmp_host(), icmp_item(), {:ok, 1.5}, @timestamp}
 
       # A directory in place of the file makes every write fail
       File.rm!(path)

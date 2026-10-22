@@ -20,8 +20,12 @@ defmodule NexPinger.StatisticsView do
   # Index of the Latest column
   @latest 5
 
-  @spec render(map(), 80..120, pos_integer(), non_neg_integer()) :: String.t()
-  def render(statistics, width, height, offset) when width in 80..120 do
+  @doc """
+  `dropped` (results the console dropped while it fell behind; not in the statistics) shows
+  in the title when not 0.
+  """
+  @spec render(map(), 80..120, pos_integer(), non_neg_integer(), non_neg_integer()) :: String.t()
+  def render(statistics, width, height, offset, dropped \\ 0) when width in 80..120 do
     layout = layout(width)
     entries = Statistics.entries(statistics)
     visible_rows = max(height - 5, 1)
@@ -30,7 +34,8 @@ defmodule NexPinger.StatisticsView do
 
     lines = [
       fit(
-        "NexPinger - Ping Statistics | RTT: ms | Window: #{statistics.window} attempts",
+        "NexPinger - Ping Statistics | RTT: ms | Window: #{statistics.window} attempts" <>
+          if(dropped > 0, do: " | Dropped: #{dropped}", else: ""),
         width
       ),
       format_row(

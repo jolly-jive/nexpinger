@@ -1,11 +1,19 @@
 defmodule NexPinger.ConsoleSubscriber do
   @moduledoc """
   Subscriber that prints results from the Broadcaster to the console.
+
+  The CLI starts it under `NexPinger.SubscriberSupervisor` with the hosts, the stats options and
+  `subscribe: true`, so a restarted subscriber gets its settings back and subscribes to the
+  Broadcaster again. The statistics start over.
+
+  If the terminal stops taking output (a selection in a conhost window, Ctrl+S, a stopped pipe),
+  the Broadcaster drops results once 1000 wait. When output moves again, each target gets a
+  `DROPPED` line, and the stats screen title shows the total: those results are not counted.
   """
 
   use GenServer
 
-  alias NexPinger.{Host, Item, ResultLine, Statistics, StatisticsView, TerminalInput, Timestamp}
+  alias NexPinger.{Broadcaster, Host, Item, ResultLine, Statistics, StatisticsView, TerminalInput}
 
   @default_stats_window 1000
   @default_stats_width 80
@@ -27,16 +35,12 @@ defmodule NexPinger.ConsoleSubscriber do
   @doc "True while the stats screen is shown."
   def stats_view?, do: :persistent_term.get(@stats_view, false)
 
+  @doc """
+  Options: `:hosts`, `:stats_window`, `:fixed_width` (80..120 keeps the stats screen width;
+  nil follows the terminal), `:subscribe` (subscribe to the Broadcaster on start; default false).
+  """
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @doc """
-  Sets the hosts and the stats options. `fixed_width` (80..120) keeps the stats
-  screen width; with nil it follows the terminal.
-  """
-  def configure(hosts, stats_window, fixed_width \\ nil) do
-    GenServer.call(__MODULE__, {:configure, hosts, stats_window, fixed_width})
   end
 
   def toggle_view, do: GenServer.cast(__MODULE__, :toggle_view)
@@ -46,35 +50,36 @@ defmodule NexPinger.ConsoleSubscriber do
   @impl true
   # `:stats_size` (test hook): 0-arity fun returning `{width, height}`
   def init(opts) do
+    hosts = Keyword.get(opts, :hosts, [])
+
+    # A restart while the stats screen was shown starts in the results view
+    if stats_view?() do
+      IO.write(@leave_stats_screen)
+      :persistent_term.put(@stats_view, false)
+    end
+
+    if Keyword.get(opts, :subscribe, false) do
+      Broadcaster.subscribe(self())
+    end
+
     {:ok,
      %{
-       statistics: Statistics.new([], @default_stats_window),
+       statistics: Statistics.new(hosts, Keyword.get(opts, :stats_window, @default_stats_window)),
        stats_size: Keyword.get(opts, :stats_size, &TerminalInput.stats_size/0),
-       fixed_width: nil,
+       fixed_width: Keyword.get(opts, :fixed_width),
        stats_width: @default_stats_width,
        stats_height: @default_stats_height,
        size_check: nil,
-       widths: ResultLine.widths([]),
+       widths: ResultLine.widths(hosts),
        mode: :results,
        offset: 0,
+       dropped: 0,
        stats_dirty: false,
        render_scheduled: false
      }}
   end
 
   @impl true
-  def handle_call({:configure, hosts, stats_window, fixed_width}, _from, state) do
-    statistics = Statistics.new(hosts, stats_window)
-
-    {:reply, :ok,
-     %{
-       state
-       | statistics: statistics,
-         fixed_width: fixed_width,
-         widths: ResultLine.widths(hosts)
-     }}
-  end
-
   def handle_call(:end_stats_view, _from, %{mode: :stats} = state) do
     {:reply, :ok, leave_stats(state)}
   end
@@ -103,7 +108,10 @@ defmodule NexPinger.ConsoleSubscriber do
   def handle_cast({:scroll, _direction}, state), do: {:noreply, state}
 
   @impl true
-  def handle_info({:item_result, %Host{} = host, %Item{} = item, {status, _} = result}, state)
+  def handle_info(
+        {:item_result, %Host{} = host, %Item{} = item, {status, _} = result, timestamp},
+        state
+      )
       when status in [:ok, :error] do
     if status == :error, do: IO.write("\a")
 
@@ -113,7 +121,26 @@ defmodule NexPinger.ConsoleSubscriber do
       if state.mode == :stats do
         schedule_stats_render(state)
       else
-        print_result(host, item, result, state.widths)
+        print_result(timestamp, host, item, result, state.widths)
+        state
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:results_dropped, drops}, state) do
+    IO.write("\a")
+    state = %{state | dropped: state.dropped + (drops |> Enum.map(& &1.count) |> Enum.sum())}
+
+    state =
+      if state.mode == :stats do
+        schedule_stats_render(state)
+      else
+        for drop <- drops do
+          result = {:dropped, drop.count, drop.first_at}
+          print_result(drop.last_at, drop.host, drop.item, result, state.widths)
+        end
+
         state
       end
 
@@ -183,8 +210,8 @@ defmodule NexPinger.ConsoleSubscriber do
   end
 
   # Some terminals (Windows) don't map "\n" to "\r\n" in raw mode, so write "\r\n".
-  defp print_result(host, item, result, widths) do
-    IO.write([ResultLine.format(Timestamp.now(), host, item, result, widths, :console), "\r\n"])
+  defp print_result(timestamp, host, item, result, widths) do
+    IO.write([ResultLine.format(timestamp, host, item, result, widths, :console), "\r\n"])
   end
 
   # Clearing first causes flicker. Instead: cursor to top-left, overwrite,
@@ -192,7 +219,7 @@ defmodule NexPinger.ConsoleSubscriber do
   defp render_stats(state) do
     frame =
       state.statistics
-      |> StatisticsView.render(state.stats_width, state.stats_height, state.offset)
+      |> StatisticsView.render(state.stats_width, state.stats_height, state.offset, state.dropped)
       |> String.replace("\r\n", "\e[K\r\n")
 
     IO.write(["\e[H", frame, "\e[J"])

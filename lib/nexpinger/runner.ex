@@ -10,7 +10,7 @@ defmodule NexPinger.Runner do
 
   use GenServer
 
-  alias NexPinger.{Broadcaster, Host, Item, MacResolver, Prober}
+  alias NexPinger.{Broadcaster, Host, Item, MacResolver, Prober, Timestamp}
 
   @type state :: %{
           host: Host.t(),
@@ -35,8 +35,9 @@ defmodule NexPinger.Runner do
   def handle_info(:probe, %{host: host, item: item} = state) do
     # The IP is fixed at startup; only the MAC is looked up per probe
     result = safe_probe(host.ip, item)
+    timestamp = Timestamp.now()
     host = %{host | mac_address: safe_mac(host)}
-    Broadcaster.publish(host, item, result)
+    Broadcaster.publish(host, item, result, timestamp)
     next_at = next_start(state.next_at, state.interval, now())
     schedule_at(next_at)
     {:noreply, %{state | next_at: next_at}}

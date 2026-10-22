@@ -13,6 +13,10 @@ defmodule NexPinger.FileSubscriber do
   creates a new file (with the TSV header). A failed write does not stop monitoring: the result
   is lost, and stderr tells when writes start failing and when they succeed again.
 
+  If writes are so slow that 100,000 results wait (a stalled network share), the Broadcaster
+  drops results until it catches up. Each target then gets one record with the status `dropped`
+  (the count and the first time in the error column), and stderr tells the total.
+
   The CLI starts it under `NexPinger.SubscriberSupervisor` with `subscribe: true`, so a restarted
   subscriber subscribes to the Broadcaster again.
   """
@@ -26,6 +30,9 @@ defmodule NexPinger.FileSubscriber do
 
   @formats [:text, :tsv, :jsonl]
   @rotates [:daily]
+
+  # A slow disk catches up later, so wait much longer than the console before dropping
+  @max_queue 100_000
 
   @fields ~w(timestamp host address resolved mac item type port status rtt_ms error)
 
@@ -88,7 +95,7 @@ defmodule NexPinger.FileSubscriber do
     }
 
     if Keyword.get(opts, :subscribe, false) do
-      Broadcaster.subscribe(self())
+      Broadcaster.subscribe(self(), max_queue: @max_queue)
     end
 
     # Stopping here would fail a restart, and enough of them stop the supervisor.
@@ -102,22 +109,47 @@ defmodule NexPinger.FileSubscriber do
   end
 
   @impl true
-  def handle_info(
-        {:item_result, %Host{} = host, %Item{} = item, result},
-        %{format: format, owner: owner, widths: widths} = state
-      ) do
-    timestamp = Timestamp.now()
+  def handle_info({:item_result, %Host{} = host, %Item{} = item, result, timestamp}, state) do
+    {:noreply, write_record(state, timestamp, host, item, result)}
+  end
+
+  def handle_info({:results_dropped, drops}, state) do
+    total = drops |> Enum.map(& &1.count) |> Enum.sum()
+    first_at = drops |> Enum.map(& &1.first_at) |> Enum.min()
+    last_at = drops |> Enum.map(& &1.last_at) |> Enum.max()
+
+    IO.puts(
+      :stderr,
+      "Log file fell behind: #{total} results dropped from #{first_at} to #{last_at} " <>
+        "(one \"dropped\" record per target)"
+    )
+
+    state =
+      Enum.reduce(drops, state, fn drop, state ->
+        write_record(
+          state,
+          drop.last_at,
+          drop.host,
+          drop.item,
+          {:dropped, drop.count, drop.first_at}
+        )
+      end)
+
+    {:noreply, state}
+  end
+
+  defp write_record(%{format: format, owner: owner} = state, timestamp, host, item, result) do
     path = file_path(state.path, state.rotate, timestamp)
-    line = format_record(format, timestamp, host, item, result, widths)
+    line = format_record(format, timestamp, host, item, result, state.widths)
 
     case append_line(path, format, line) do
       :ok ->
         notify_owner(owner, {:file_written, path})
-        {:noreply, report_recovery(state, path)}
+        report_recovery(state, path)
 
       {:error, reason} ->
         notify_owner(owner, {:file_write_failed, path, reason})
-        {:noreply, report_failure(state, path, reason)}
+        report_failure(state, path, reason)
     end
   end
 
@@ -148,7 +180,7 @@ defmodule NexPinger.FileSubscriber do
           String.t(),
           Host.t(),
           Item.t(),
-          {:ok, number()} | {:error, term()},
+          ResultLine.result(),
           ResultLine.widths()
         ) ::
           iodata()
@@ -184,8 +216,14 @@ defmodule NexPinger.FileSubscriber do
   defp record_values(timestamp, %Host{} = host, %Item{} = item, result) do
     {status, rtt_ms, error} =
       case result do
-        {:ok, rtt_ms} -> {"ok", rtt_ms, nil}
-        {:error, reason} -> {"ng", nil, reason_string(reason)}
+        {:ok, rtt_ms} ->
+          {"ok", rtt_ms, nil}
+
+        {:error, reason} ->
+          {"ng", nil, reason_string(reason)}
+
+        {:dropped, count, first_at} ->
+          {"dropped", nil, "#{count} results dropped since #{first_at}"}
       end
 
     [

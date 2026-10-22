@@ -4,6 +4,13 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
   alias NexPinger.{ConsoleSubscriber, Host, Item}
 
+  @timestamp "2026-09-30 12:00:00.123"
+
+  # Entering the stats view sets a global flag; a later init would see it
+  setup do
+    on_exit(fn -> :persistent_term.put({ConsoleSubscriber, :stats_view}, false) end)
+  end
+
   test "beeps when an item result is an error" do
     host = %Host{name: "gateway", address: "192.0.2.1", items: []}
     item = %Item{name: "ping", type: :icmp}
@@ -11,7 +18,10 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, host, item, {:error, "timeout"}}, state)
+        ConsoleSubscriber.handle_info(
+          {:item_result, host, item, {:error, "timeout"}, @timestamp},
+          state
+        )
       end)
 
     assert output =~ "\a"
@@ -25,7 +35,7 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
+        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}, @timestamp}, state)
       end)
 
     refute output =~ "\a"
@@ -51,15 +61,16 @@ defmodule NexPinger.ConsoleSubscriberTest do
       items: [ping]
     }
 
-    {:ok, state} = ConsoleSubscriber.init([])
-
-    {:reply, :ok, state} =
-      ConsoleSubscriber.handle_call({:configure, [web, gateway], 1000, nil}, self(), state)
+    {:ok, state} = ConsoleSubscriber.init(hosts: [web, gateway])
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, web, https, {:ok, 1.23}}, state)
-        ConsoleSubscriber.handle_info({:item_result, gateway, ping, {:error, "timeout"}}, state)
+        ConsoleSubscriber.handle_info({:item_result, web, https, {:ok, 1.23}, @timestamp}, state)
+
+        ConsoleSubscriber.handle_info(
+          {:item_result, gateway, ping, {:error, "timeout"}, @timestamp},
+          state
+        )
       end)
 
     ok = IO.ANSI.green() <> "ok" <> IO.ANSI.reset()
@@ -83,7 +94,7 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
+        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}, @timestamp}, state)
       end)
 
     assert output =~ " 192.0.2.1 mac    ping icmp "
@@ -113,7 +124,10 @@ defmodule NexPinger.ConsoleSubscriberTest do
       with_io(fn ->
         Enum.reduce(1..3, state, fn _, state ->
           {:noreply, state} =
-            ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
+            ConsoleSubscriber.handle_info(
+              {:item_result, host, item, {:ok, 1.23}, @timestamp},
+              state
+            )
 
           state
         end)
@@ -164,10 +178,7 @@ defmodule NexPinger.ConsoleSubscriberTest do
         }
       end
 
-    {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> {120, 40} end)
-
-    {:reply, :ok, state} =
-      ConsoleSubscriber.handle_call({:configure, hosts, 1000, nil}, self(), state)
+    {:ok, state} = ConsoleSubscriber.init(hosts: hosts, stats_size: fn -> {120, 40} end)
 
     ref = make_ref()
 
@@ -193,10 +204,7 @@ defmodule NexPinger.ConsoleSubscriberTest do
   end
 
   test "keeps a fixed width and skips redraws while the size stays the same" do
-    {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> {120, 24} end)
-
-    {:reply, :ok, state} =
-      ConsoleSubscriber.handle_call({:configure, [], 1000, 80}, self(), state)
+    {:ok, state} = ConsoleSubscriber.init(fixed_width: 80, stats_size: fn -> {120, 24} end)
 
     ref = make_ref()
     state = %{state | mode: :stats, size_check: ref}
@@ -215,5 +223,112 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
     state = %{state | mode: :stats, size_check: make_ref()}
     assert {:noreply, ^state} = ConsoleSubscriber.handle_info({:check_size, make_ref()}, state)
+  end
+
+  describe "dropped results" do
+    setup do
+      host = %Host{name: "gateway", address: "192.0.2.1", items: []}
+      item = %Item{name: "ping", type: :icmp}
+
+      drop = %{
+        host: host,
+        item: item,
+        count: 42,
+        first_at: "2026-09-30 11:59:00.000",
+        last_at: "2026-09-30 11:59:30.000"
+      }
+
+      %{drop: drop}
+    end
+
+    test "print a DROPPED line per target, with a beep", %{drop: drop} do
+      {:ok, state} = ConsoleSubscriber.init([])
+
+      {{:noreply, state}, output} =
+        with_io(fn -> ConsoleSubscriber.handle_info({:results_dropped, [drop]}, state) end)
+
+      dropped = IO.ANSI.yellow() <> "DROPPED" <> IO.ANSI.reset()
+      assert output =~ "\a"
+
+      assert output =~
+               "2026-09-30 11:59:30.000 192.0.2.1 -      ping icmp #{dropped} 42 results since 2026-09-30 11:59:00.000  gateway\r\n"
+
+      assert state.dropped == 42
+    end
+
+    test "add up in the stats screen title", %{drop: drop} do
+      {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> {80, 24} end)
+
+      {{:noreply, state}, _enter} =
+        with_io(fn -> ConsoleSubscriber.handle_cast(:toggle_view, state) end)
+
+      {{:noreply, state}, output} =
+        with_io(fn ->
+          {:noreply, state} = ConsoleSubscriber.handle_info({:results_dropped, [drop]}, state)
+          ConsoleSubscriber.handle_info({:results_dropped, [drop]}, state)
+        end)
+
+      refute output =~ "DROPPED"
+      assert_receive :render_stats, 500
+
+      {{:noreply, _state}, frame} =
+        with_io(fn -> ConsoleSubscriber.handle_info(:render_stats, state) end)
+
+      assert frame =~ "Dropped: 84"
+    end
+  end
+
+  test "leaves a stats screen left over from before a restart" do
+    :persistent_term.put({ConsoleSubscriber, :stats_view}, true)
+
+    {{:ok, state}, output} = with_io(fn -> ConsoleSubscriber.init([]) end)
+
+    assert output == ConsoleSubscriber.leave_stats_screen()
+    refute ConsoleSubscriber.stats_view?()
+    assert state.mode == :results
+  end
+
+  describe "under a supervisor" do
+    test "gets its settings back and subscribes again after a restart" do
+      host = %Host{
+        name: "gateway",
+        address: "192.0.2.1",
+        resolved: "192.0.2.1",
+        items: [%Item{name: "ping", type: :icmp}]
+      }
+
+      supervisor = start_supervised!({DynamicSupervisor, strategy: :one_for_one})
+
+      {:ok, pid} =
+        DynamicSupervisor.start_child(
+          supervisor,
+          {ConsoleSubscriber, hosts: [host], stats_window: 50, fixed_width: 100, subscribe: true}
+        )
+
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      new_pid = wait_for_restart(supervisor, pid)
+      state = :sys.get_state(new_pid)
+
+      assert state.fixed_width == 100
+      assert state.statistics.window == 50
+      assert [%{host: %Host{name: "gateway"}}] = NexPinger.Statistics.entries(state.statistics)
+      assert state.widths.ip == String.length("192.0.2.1")
+
+      assert Map.has_key?(:sys.get_state(NexPinger.Broadcaster).subscribers, new_pid)
+    end
+  end
+
+  defp wait_for_restart(supervisor, old_pid, tries \\ 100) do
+    case DynamicSupervisor.which_children(supervisor) do
+      [{_, pid, _, _}] when is_pid(pid) and pid != old_pid ->
+        pid
+
+      _not_yet when tries > 0 ->
+        Process.sleep(10)
+        wait_for_restart(supervisor, old_pid, tries - 1)
+    end
   end
 end

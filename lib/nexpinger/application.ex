@@ -9,9 +9,8 @@ defmodule NexPinger.Application do
       {Registry, keys: :unique, name: NexPinger.MonitorRegistry},
       {DynamicSupervisor, strategy: :one_for_one, name: NexPinger.MonitorSupervisor},
       NexPinger.Broadcaster,
-      # After the Broadcaster: subscribers subscribe on start
+      # After the Broadcaster: subscribers subscribe on start. The CLI starts them.
       {DynamicSupervisor, strategy: :one_for_one, name: NexPinger.SubscriberSupervisor},
-      NexPinger.ConsoleSubscriber,
       NexPinger.IcmpHelper,
       NexPinger.MacResolver
     ]
