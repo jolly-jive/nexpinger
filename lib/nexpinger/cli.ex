@@ -183,11 +183,10 @@ defmodule NexPinger.CLI do
       start_log_file_subscriber(log, ResultLine.widths(hosts))
     end
 
-    ConsoleSubscriber.configure(hosts, stats_window, requested_stats_width)
     print_banner(hosts, paths, log, stdout_enabled, address_warnings)
 
     if stdout_enabled do
-      NexPinger.Broadcaster.subscribe(NexPinger.ConsoleSubscriber)
+      start_console_subscriber(hosts, stats_window, requested_stats_width)
     end
 
     for host <- hosts, item <- host.items, do: start_monitor(host, item)
@@ -342,6 +341,15 @@ defmodule NexPinger.CLI do
 
   defp log_file_description(%{file: file, format: format, rotate: rotate}),
     do: "#{FileSubscriber.file_path(file, rotate, Timestamp.now())} (#{format}, #{rotate})"
+
+  defp start_console_subscriber(hosts, stats_window, fixed_width) do
+    spec =
+      {ConsoleSubscriber,
+       hosts: hosts, stats_window: stats_window, fixed_width: fixed_width, subscribe: true}
+
+    {:ok, _pid} = DynamicSupervisor.start_child(NexPinger.SubscriberSupervisor, spec)
+    :ok
+  end
 
   defp start_log_file_subscriber(%{file: file, format: format, rotate: rotate}, widths) do
     # Checked here for a plain message; once started, failures don't stop monitoring

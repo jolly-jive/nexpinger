@@ -1,11 +1,15 @@
 defmodule NexPinger.ConsoleSubscriber do
   @moduledoc """
   Subscriber that prints results from the Broadcaster to the console.
+
+  The CLI starts it under `NexPinger.SubscriberSupervisor` with the hosts, the stats options and
+  `subscribe: true`, so a restarted subscriber gets its settings back and subscribes to the
+  Broadcaster again. The statistics start over.
   """
 
   use GenServer
 
-  alias NexPinger.{Host, Item, ResultLine, Statistics, StatisticsView, TerminalInput}
+  alias NexPinger.{Broadcaster, Host, Item, ResultLine, Statistics, StatisticsView, TerminalInput}
 
   @default_stats_window 1000
   @default_stats_width 80
@@ -27,16 +31,12 @@ defmodule NexPinger.ConsoleSubscriber do
   @doc "True while the stats screen is shown."
   def stats_view?, do: :persistent_term.get(@stats_view, false)
 
+  @doc """
+  Options: `:hosts`, `:stats_window`, `:fixed_width` (80..120 keeps the stats screen width;
+  nil follows the terminal), `:subscribe` (subscribe to the Broadcaster on start; default false).
+  """
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @doc """
-  Sets the hosts and the stats options. `fixed_width` (80..120) keeps the stats
-  screen width; with nil it follows the terminal.
-  """
-  def configure(hosts, stats_window, fixed_width \\ nil) do
-    GenServer.call(__MODULE__, {:configure, hosts, stats_window, fixed_width})
   end
 
   def toggle_view, do: GenServer.cast(__MODULE__, :toggle_view)
@@ -46,15 +46,27 @@ defmodule NexPinger.ConsoleSubscriber do
   @impl true
   # `:stats_size` (test hook): 0-arity fun returning `{width, height}`
   def init(opts) do
+    hosts = Keyword.get(opts, :hosts, [])
+
+    # A restart while the stats screen was shown starts in the results view
+    if stats_view?() do
+      IO.write(@leave_stats_screen)
+      :persistent_term.put(@stats_view, false)
+    end
+
+    if Keyword.get(opts, :subscribe, false) do
+      Broadcaster.subscribe(self())
+    end
+
     {:ok,
      %{
-       statistics: Statistics.new([], @default_stats_window),
+       statistics: Statistics.new(hosts, Keyword.get(opts, :stats_window, @default_stats_window)),
        stats_size: Keyword.get(opts, :stats_size, &TerminalInput.stats_size/0),
-       fixed_width: nil,
+       fixed_width: Keyword.get(opts, :fixed_width),
        stats_width: @default_stats_width,
        stats_height: @default_stats_height,
        size_check: nil,
-       widths: ResultLine.widths([]),
+       widths: ResultLine.widths(hosts),
        mode: :results,
        offset: 0,
        stats_dirty: false,
@@ -63,18 +75,6 @@ defmodule NexPinger.ConsoleSubscriber do
   end
 
   @impl true
-  def handle_call({:configure, hosts, stats_window, fixed_width}, _from, state) do
-    statistics = Statistics.new(hosts, stats_window)
-
-    {:reply, :ok,
-     %{
-       state
-       | statistics: statistics,
-         fixed_width: fixed_width,
-         widths: ResultLine.widths(hosts)
-     }}
-  end
-
   def handle_call(:end_stats_view, _from, %{mode: :stats} = state) do
     {:reply, :ok, leave_stats(state)}
   end

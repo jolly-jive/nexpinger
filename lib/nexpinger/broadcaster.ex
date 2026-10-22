@@ -1,6 +1,9 @@
 defmodule NexPinger.Broadcaster do
   @moduledoc """
   Event hub that sends monitoring results to subscribers.
+
+  Subscribers are monitored and dropped when they exit. A restarted subscriber has a new pid,
+  so it subscribes again itself (see `NexPinger.FileSubscriber` and `NexPinger.ConsoleSubscriber`).
   """
 
   use GenServer
@@ -37,19 +40,32 @@ defmodule NexPinger.Broadcaster do
 
   @impl true
   def init(_opts) do
-    {:ok, %{subscribers: []}}
+    # pid => monitor ref
+    {:ok, %{subscribers: %{}}}
   end
 
   @impl true
-  def handle_cast({:subscribe, subscriber}, %{subscribers: subscribers} = state) do
-    {:noreply, %{state | subscribers: Enum.uniq([subscriber | subscribers])}}
+  def handle_cast({:subscribe, pid}, %{subscribers: subscribers} = state) do
+    if Map.has_key?(subscribers, pid) do
+      {:noreply, state}
+    else
+      {:noreply, %{state | subscribers: Map.put(subscribers, pid, Process.monitor(pid))}}
+    end
   end
 
   def handle_cast({:publish, host, item, event, timestamp}, %{subscribers: subscribers} = state) do
-    Enum.each(subscribers, fn subscriber ->
-      send(subscriber, {:item_result, host, item, event, timestamp})
+    Enum.each(Map.keys(subscribers), fn pid ->
+      send(pid, {:item_result, host, item, event, timestamp})
     end)
 
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, pid, _reason}, %{subscribers: subscribers} = state) do
+    case subscribers do
+      %{^pid => ^ref} -> {:noreply, %{state | subscribers: Map.delete(subscribers, pid)}}
+      _other -> {:noreply, state}
+    end
   end
 end
