@@ -2,6 +2,8 @@ defmodule NexPinger.ResultLine do
   @moduledoc """
   One result as a line of text, for the console and the text log file.
   Columns: time, IP, MAC, item, port/protocol, ok|NG, RTT or reason, host name.
+  Results dropped while a subscriber fell behind are one line per target:
+  `DROPPED`, then the count and the time of the first one.
 
   The MAC column:
     * `mac` (console) or the MAC address (file): found in the neighbor table
@@ -17,6 +19,10 @@ defmodule NexPinger.ResultLine do
 
   @type widths :: %{ip: non_neg_integer(), item: non_neg_integer(), port: non_neg_integer()}
   @type target :: :console | :file
+  @type result ::
+          {:ok, number()}
+          | {:error, term()}
+          | {:dropped, pos_integer(), first_at :: String.t()}
 
   @mac_width %{console: 6, file: 17}
   # "~8.2f ms"
@@ -47,7 +53,7 @@ defmodule NexPinger.ResultLine do
           String.t(),
           Host.t(),
           Item.t(),
-          {:ok, number()} | {:error, term()},
+          result(),
           widths(),
           target()
         ) ::
@@ -89,8 +95,13 @@ defmodule NexPinger.ResultLine do
 
   defp status_tag({:ok, _rtt_ms}, :console), do: IO.ANSI.green() <> "ok" <> IO.ANSI.reset()
   defp status_tag({:error, _reason}, :console), do: IO.ANSI.red() <> "NG" <> IO.ANSI.reset()
+
+  defp status_tag({:dropped, _count, _first_at}, :console),
+    do: IO.ANSI.yellow() <> "DROPPED" <> IO.ANSI.reset()
+
   defp status_tag({:ok, _rtt_ms}, :file), do: "ok"
   defp status_tag({:error, _reason}, :file), do: "NG"
+  defp status_tag({:dropped, _count, _first_at}, :file), do: "DROPPED"
 
   defp detail({:ok, rtt_ms}), do: :io_lib.format("~8.2f ms", [rtt_ms])
 
@@ -98,4 +109,6 @@ defmodule NexPinger.ResultLine do
     do: DisplayWidth.pad_trailing(reason, @detail_width)
 
   defp detail({:error, reason}), do: detail({:error, inspect(reason)})
+
+  defp detail({:dropped, count, first_at}), do: "#{count} results since #{first_at}"
 end

@@ -181,6 +181,63 @@ defmodule NexPinger.FileSubscriberTest do
     end
   end
 
+  describe "dropped results" do
+    @dropped {:dropped, 42, "2026-09-30 11:59:00.000"}
+
+    test "are one record with the status dropped in every format" do
+      assert record(:text, icmp_host(), icmp_item(), @dropped) ==
+               "2026-09-30 12:00:00.123 192.0.2.1 -                 ping icmp DROPPED 42 results since 2026-09-30 11:59:00.000  gateway\n"
+
+      assert record(:tsv, icmp_host(), icmp_item(), @dropped) ==
+               "2026-09-30 12:00:00.123\tgateway\t192.0.2.1\t\t\tping\ticmp\t\tdropped\t\t42 results dropped since 2026-09-30 11:59:00.000\n"
+
+      assert %{
+               "status" => "dropped",
+               "rtt_ms" => nil,
+               "error" => "42 results dropped since " <> _
+             } =
+               JSON.decode!(record(:jsonl, icmp_host(), icmp_item(), @dropped))
+    end
+
+    @tag :tmp_dir
+    test "are written per target, with the total on stderr", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "monitor.tsv")
+
+      {:ok, state} =
+        FileSubscriber.init(path: path, format: :tsv, owner: self(), widths: @widths)
+
+      drops = [
+        %{
+          host: icmp_host(),
+          item: icmp_item(),
+          count: 3,
+          first_at: "2026-09-30 11:59:00.000",
+          last_at: "2026-09-30 11:59:02.000"
+        },
+        %{
+          host: tcp_host(),
+          item: tcp_item(),
+          count: 2,
+          first_at: "2026-09-30 11:59:01.000",
+          last_at: "2026-09-30 11:59:03.000"
+        }
+      ]
+
+      stderr =
+        capture_io(:stderr, fn -> FileSubscriber.handle_info({:results_dropped, drops}, state) end)
+
+      assert stderr =~
+               "Log file fell behind: 5 results dropped from 2026-09-30 11:59:00.000 to 2026-09-30 11:59:03.000"
+
+      assert [_header, gateway, web] = path |> File.read!() |> String.split("\n", trim: true)
+
+      assert gateway =~
+               ~r/^2026-09-30 11:59:02\.000\tgateway\t.*\tdropped\t\t3 results dropped since 2026-09-30 11:59:00\.000$/
+
+      assert web =~ ~r/^2026-09-30 11:59:03\.000\tweb\t.*\tdropped\t\t2 results dropped since/
+    end
+  end
+
   describe "file output" do
     @describetag :tmp_dir
 

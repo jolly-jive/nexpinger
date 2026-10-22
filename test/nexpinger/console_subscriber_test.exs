@@ -225,6 +225,59 @@ defmodule NexPinger.ConsoleSubscriberTest do
     assert {:noreply, ^state} = ConsoleSubscriber.handle_info({:check_size, make_ref()}, state)
   end
 
+  describe "dropped results" do
+    setup do
+      host = %Host{name: "gateway", address: "192.0.2.1", items: []}
+      item = %Item{name: "ping", type: :icmp}
+
+      drop = %{
+        host: host,
+        item: item,
+        count: 42,
+        first_at: "2026-09-30 11:59:00.000",
+        last_at: "2026-09-30 11:59:30.000"
+      }
+
+      %{drop: drop}
+    end
+
+    test "print a DROPPED line per target, with a beep", %{drop: drop} do
+      {:ok, state} = ConsoleSubscriber.init([])
+
+      {{:noreply, state}, output} =
+        with_io(fn -> ConsoleSubscriber.handle_info({:results_dropped, [drop]}, state) end)
+
+      dropped = IO.ANSI.yellow() <> "DROPPED" <> IO.ANSI.reset()
+      assert output =~ "\a"
+
+      assert output =~
+               "2026-09-30 11:59:30.000 192.0.2.1 -      ping icmp #{dropped} 42 results since 2026-09-30 11:59:00.000  gateway\r\n"
+
+      assert state.dropped == 42
+    end
+
+    test "add up in the stats screen title", %{drop: drop} do
+      {:ok, state} = ConsoleSubscriber.init(stats_size: fn -> {80, 24} end)
+
+      {{:noreply, state}, _enter} =
+        with_io(fn -> ConsoleSubscriber.handle_cast(:toggle_view, state) end)
+
+      {{:noreply, state}, output} =
+        with_io(fn ->
+          {:noreply, state} = ConsoleSubscriber.handle_info({:results_dropped, [drop]}, state)
+          ConsoleSubscriber.handle_info({:results_dropped, [drop]}, state)
+        end)
+
+      refute output =~ "DROPPED"
+      assert_receive :render_stats, 500
+
+      {{:noreply, _state}, frame} =
+        with_io(fn -> ConsoleSubscriber.handle_info(:render_stats, state) end)
+
+      assert frame =~ "Dropped: 84"
+    end
+  end
+
   test "leaves a stats screen left over from before a restart" do
     :persistent_term.put({ConsoleSubscriber, :stats_view}, true)
 

@@ -169,4 +169,17 @@ defmodule NexPinger.StatisticsViewTest do
     # 10 wide characters and "~" take 21 of 22 columns; a space fills the last
     assert long =~ "本社サーバ大阪第二デ~  - "
   end
+
+  test "shows the results the console dropped in the title" do
+    host = %Host{name: "web", address: "192.0.2.1", items: [%Item{name: "ping", type: :icmp}]}
+    statistics = Statistics.new([host], 1000)
+
+    title = fn dropped ->
+      statistics |> StatisticsView.render(80, 24, 0, dropped) |> String.split("\r\n") |> hd()
+    end
+
+    assert title.(42) =~ "Window: 1000 attempts | Dropped: 42"
+    refute title.(0) =~ "Dropped"
+    assert String.length(title.(42)) == 80
+  end
 end
