@@ -18,6 +18,27 @@ defmodule NexPinger.CLI do
     UdpProbe
   }
 
+  @type log :: %{
+          file: String.t(),
+          format: FileSubscriber.format(),
+          rotate: FileSubscriber.rotate()
+        }
+
+  @type settings :: %{
+          paths: [String.t()],
+          log: log() | nil,
+          stdout_enabled: boolean(),
+          stats_window: pos_integer(),
+          stats_width: 80..120 | nil,
+          ping_command: boolean()
+        }
+
+  @type plan :: %{
+          settings: settings(),
+          hosts: [NexPinger.Host.t()],
+          address_warnings: [String.t()]
+        }
+
   @usage """
   Usage: nexpinger [options] <config file>...
 
@@ -35,7 +56,8 @@ defmodule NexPinger.CLI do
 
   @version Mix.Project.config()[:version]
 
-  @spec parse_options([String.t()]) :: {keyword(), [String.t()], [String.t()]}
+  @spec parse_options([String.t()]) ::
+          {keyword(), [String.t()], [{String.t(), String.t() | nil}]}
   def parse_options(argv) do
     OptionParser.parse(argv,
       strict: [
@@ -52,54 +74,70 @@ defmodule NexPinger.CLI do
     )
   end
 
+  # Exits here, or on quit once monitoring runs; the steps below return what to do
   def main(argv) do
-    {opts, args, invalid} = parse_options(argv)
-
-    if invalid != [] do
-      invalid_options = Enum.map_join(invalid, ", ", fn {option, _value} -> option end)
-      IO.puts(:stderr, "Invalid option: #{invalid_options}")
-      IO.puts(:stderr, @usage)
-      System.halt(1)
-    end
-
-    if Keyword.get(opts, :version, false) do
-      IO.puts(version_string())
-      System.halt(0)
-    end
-
-    validate_stats_options!(opts)
-
-    log =
-      with {:ok, format} <- log_format(opts),
-           {:ok, rotate} <- log_rotate(opts) do
-        log_file = Keyword.get(opts, :log_file)
-        log_file && %{file: log_file, format: format, rotate: rotate}
-      else
-        {:error, message} ->
-          IO.puts(:stderr, message)
-          System.halt(1)
+    result =
+      with {:ok, settings} <- parse(argv) do
+        prepare(settings)
       end
 
-    if Keyword.get(opts, :help, false) do
-      IO.puts(@usage)
-      System.halt(0)
-    end
+    case result do
+      {:ok, plan} ->
+        start(plan)
 
-    stdout_enabled = not Keyword.get(opts, :no_stdout, false)
-    stats_window = Keyword.get(opts, :stats_window, 1000)
-    requested_stats_width = Keyword.get(opts, :stats_width)
+      {:help, text} ->
+        IO.puts(text)
+        System.halt(0)
 
-    if Keyword.get(opts, :ping_command, false) do
-      Prober.force_ping_command()
-    end
+      {:version, text} ->
+        IO.puts(text)
+        System.halt(0)
 
-    case args do
-      [] ->
-        IO.puts(:stderr, "No config file given")
+      {:error, message} ->
+        IO.puts(:stderr, message)
         System.halt(1)
+    end
+  end
 
-      paths ->
-        run(paths, log, stdout_enabled, stats_window, requested_stats_width)
+  @doc """
+  Reads the command line, without side effects.
+  `{:help, text}` and `{:version, text}` exit 0 after printing the text; `{:error, message}` exits 1.
+  """
+  @spec parse([String.t()]) ::
+          {:ok, settings()} | {:help, String.t()} | {:version, String.t()} | {:error, String.t()}
+  def parse(argv) do
+    {opts, paths, invalid} = parse_options(argv)
+
+    with :ok <- check_invalid(invalid),
+         :ok <- check_version(opts),
+         :ok <- check_stats_options(opts),
+         {:ok, log} <- log_settings(opts),
+         :ok <- check_help(opts),
+         :ok <- check_paths(paths) do
+      {:ok,
+       %{
+         paths: paths,
+         log: log,
+         stdout_enabled: not Keyword.get(opts, :no_stdout, false),
+         stats_window: Keyword.get(opts, :stats_window, 1000),
+         stats_width: Keyword.get(opts, :stats_width),
+         ping_command: Keyword.get(opts, :ping_command, false)
+       }}
+    end
+  end
+
+  @doc """
+  Loads the config files, resolves the hosts and checks that the log file can be opened
+  (creating it if needed). Starts nothing.
+  """
+  @spec prepare(settings(), function()) :: {:ok, plan()} | {:error, String.t()}
+  def prepare(settings, resolve \\ &Resolver.resolve/2) do
+    with {:ok, hosts} <- load_hosts(settings.paths),
+         {:ok, hosts, address_warnings} <- resolve_all(hosts, resolve),
+         :ok <- prepare_log_file(settings.log) do
+      networks = OnLink.networks()
+      hosts = Enum.map(hosts, &%{&1 | on_link: OnLink.on_link?(&1.ip, networks)})
+      {:ok, %{settings: settings, hosts: hosts, address_warnings: address_warnings}}
     end
   end
 
@@ -148,45 +186,21 @@ defmodule NexPinger.CLI do
     end
   end
 
-  defp run(paths, log, stdout_enabled, stats_window, requested_stats_width) do
-    case load_hosts(paths) do
-      {:ok, []} ->
-        IO.puts(:stderr, "No hosts in config: #{Enum.join(paths, ", ")}")
-        System.halt(1)
-
-      {:ok, hosts} ->
-        start(hosts, paths, log, stdout_enabled, stats_window, requested_stats_width)
-
-      {:error, message} ->
-        IO.puts(:stderr, "Failed to load config: #{message}")
-        System.halt(1)
-    end
-  end
-
-  defp start(hosts, paths, log, stdout_enabled, stats_window, requested_stats_width) do
-    {hosts, address_warnings} =
-      case resolve_hosts(hosts) do
-        {:ok, hosts, warnings} ->
-          {hosts, warnings}
-
-        {:error, errors} ->
-          Enum.each(errors, &IO.puts(:stderr, &1))
-          System.halt(1)
-      end
-
-    networks = OnLink.networks()
-    hosts = Enum.map(hosts, &%{&1 | on_link: OnLink.on_link?(&1.ip, networks)})
-
-    interactive? = stdout_enabled and TerminalInput.available?()
-
-    if log do
-      start_log_file_subscriber(log, ResultLine.widths(hosts))
+  defp start(%{settings: settings, hosts: hosts, address_warnings: address_warnings}) do
+    if settings.ping_command do
+      Prober.force_ping_command()
     end
 
-    print_banner(hosts, paths, log, stdout_enabled, address_warnings)
+    interactive? = settings.stdout_enabled and TerminalInput.available?()
 
-    if stdout_enabled do
-      start_console_subscriber(hosts, stats_window, requested_stats_width)
+    if settings.log do
+      start_log_file_subscriber(settings.log, ResultLine.widths(hosts))
+    end
+
+    print_banner(hosts, settings.paths, settings.log, settings.stdout_enabled, address_warnings)
+
+    if settings.stdout_enabled do
+      start_console_subscriber(hosts, settings.stats_window, settings.stats_width)
     end
 
     for host <- hosts, item <- host.items, do: start_monitor(host, item)
@@ -299,23 +313,60 @@ defmodule NexPinger.CLI do
     end
   end
 
-  defp validate_stats_options!(opts) do
+  defp check_invalid([]), do: :ok
+
+  defp check_invalid(invalid) do
+    invalid_options = Enum.map_join(invalid, ", ", fn {option, _value} -> option end)
+    {:error, "Invalid option: #{invalid_options}\n#{@usage}"}
+  end
+
+  defp check_version(opts) do
+    if Keyword.get(opts, :version, false), do: {:version, version_string()}, else: :ok
+  end
+
+  defp check_help(opts) do
+    if Keyword.get(opts, :help, false), do: {:help, @usage}, else: :ok
+  end
+
+  defp check_paths([]), do: {:error, "No config file given"}
+  defp check_paths(_paths), do: :ok
+
+  defp check_stats_options(opts) do
     stats_window = Keyword.get(opts, :stats_window, 1000)
     stats_width = Keyword.get(opts, :stats_width)
 
     cond do
       stats_window <= 0 ->
-        IO.puts(:stderr, "--stats-window must be >= 1")
-        System.halt(1)
+        {:error, "--stats-window must be >= 1"}
 
       not is_nil(stats_width) and stats_width not in 80..120 ->
-        IO.puts(:stderr, "--stats-width must be 80-120")
-        System.halt(1)
+        {:error, "--stats-width must be 80-120"}
 
       true ->
         :ok
     end
   end
+
+  defp log_settings(opts) do
+    with {:ok, format} <- log_format(opts),
+         {:ok, rotate} <- log_rotate(opts) do
+      log_file = Keyword.get(opts, :log_file)
+      {:ok, log_file && %{file: log_file, format: format, rotate: rotate}}
+    end
+  end
+
+  defp resolve_all(hosts, resolve) do
+    case resolve_hosts(hosts, resolve) do
+      {:ok, hosts, warnings} -> {:ok, hosts, warnings}
+      {:error, errors} -> {:error, Enum.join(errors, "\n")}
+    end
+  end
+
+  # Checked here for a plain message; once started, failures don't stop monitoring
+  defp prepare_log_file(nil), do: :ok
+
+  defp prepare_log_file(%{file: file, format: format, rotate: rotate}),
+    do: FileSubscriber.prepare(FileSubscriber.file_path(file, rotate, Timestamp.now()), format)
 
   defp load_hosts(paths) do
     result =
@@ -333,7 +384,13 @@ defmodule NexPinger.CLI do
     with {:ok, host_lists} <- result,
          hosts = host_lists |> Enum.reverse() |> List.flatten(),
          :ok <- Config.check_duplicates(hosts) do
-      {:ok, hosts}
+      if hosts == [] do
+        {:error, "No hosts in config: #{Enum.join(paths, ", ")}"}
+      else
+        {:ok, hosts}
+      end
+    else
+      {:error, message} -> {:error, "Failed to load config: #{message}"}
     end
   end
 
@@ -352,26 +409,18 @@ defmodule NexPinger.CLI do
   end
 
   defp start_log_file_subscriber(%{file: file, format: format, rotate: rotate}, widths) do
-    # Checked here for a plain message; once started, failures don't stop monitoring
-    case FileSubscriber.prepare(FileSubscriber.file_path(file, rotate, Timestamp.now()), format) do
-      :ok ->
-        spec =
-          {FileSubscriber,
-           path: file,
-           name: :log_file_subscriber,
-           format: format,
-           widths: widths,
-           rotate: rotate,
-           subscribe: true}
+    spec =
+      {FileSubscriber,
+       path: file,
+       name: :log_file_subscriber,
+       format: format,
+       widths: widths,
+       rotate: rotate,
+       subscribe: true}
 
-        case DynamicSupervisor.start_child(NexPinger.SubscriberSupervisor, spec) do
-          {:ok, _pid} -> :ok
-          {:error, {:already_started, _pid}} -> :ok
-        end
-
-      {:error, message} ->
-        IO.puts(:stderr, message)
-        System.halt(1)
+    case DynamicSupervisor.start_child(NexPinger.SubscriberSupervisor, spec) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
     end
   end
 end
