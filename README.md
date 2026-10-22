@@ -1,4 +1,4 @@
-# NexPinger (Elixir CUI)
+# <img src="docs/icon.svg" alt="" width="32" height="32"> NexPinger (Elixir CUI)
 
 English | [日本語](README.ja.md)
 

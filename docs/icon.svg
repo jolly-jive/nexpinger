@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>NexPinger</title>
+  <rect width="64" height="64" rx="14" fill="#4B275F"/>
+  <clipPath id="clip"><rect width="64" height="64" rx="14"/></clipPath>
+  <polyline points="8,36 19,36 25,18 34,48 40,30 44,36 49,36" fill="none" stroke="#F3ECF8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="none" stroke="#3FB950" clip-path="url(#clip)">
+    <circle cx="55" cy="36" r="9.5" stroke-width="2.5" opacity="0.65"/>
+    <circle cx="55" cy="36" r="15" stroke-width="2" opacity="0.4"/>
+    <circle cx="55" cy="36" r="20.5" stroke-width="1.8" opacity="0.2"/>
+  </g>
+  <circle cx="55" cy="36" r="4.5" fill="#3FB950"/>
+</svg>
