@@ -318,3 +318,9 @@ Copyright 2026 Cayenne Ryo
 Licensed under the [Apache License 2.0](LICENSE). See also [NOTICE](NOTICE).
 
 The release binaries include third-party software (Elixir, Erlang/OTP, yaml_elixir, yamerl, Burrito, etc.). Their licenses are in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES), which is also attached to each GitHub Release.
+
+## Ice cream
+
+If NexPinger saves you some trouble, buy me an ice cream. 🍦
+
+*This is a request, not a license term. NexPinger is under Apache-2.0, with no extra conditions.*
