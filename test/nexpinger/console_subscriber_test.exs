@@ -4,6 +4,8 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
   alias NexPinger.{ConsoleSubscriber, Host, Item}
 
+  @timestamp "2026-09-30 12:00:00.123"
+
   test "beeps when an item result is an error" do
     host = %Host{name: "gateway", address: "192.0.2.1", items: []}
     item = %Item{name: "ping", type: :icmp}
@@ -11,7 +13,10 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, host, item, {:error, "timeout"}}, state)
+        ConsoleSubscriber.handle_info(
+          {:item_result, host, item, {:error, "timeout"}, @timestamp},
+          state
+        )
       end)
 
     assert output =~ "\a"
@@ -25,7 +30,7 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
+        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}, @timestamp}, state)
       end)
 
     refute output =~ "\a"
@@ -58,8 +63,12 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, web, https, {:ok, 1.23}}, state)
-        ConsoleSubscriber.handle_info({:item_result, gateway, ping, {:error, "timeout"}}, state)
+        ConsoleSubscriber.handle_info({:item_result, web, https, {:ok, 1.23}, @timestamp}, state)
+
+        ConsoleSubscriber.handle_info(
+          {:item_result, gateway, ping, {:error, "timeout"}, @timestamp},
+          state
+        )
       end)
 
     ok = IO.ANSI.green() <> "ok" <> IO.ANSI.reset()
@@ -83,7 +92,7 @@ defmodule NexPinger.ConsoleSubscriberTest do
 
     output =
       capture_io(fn ->
-        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
+        ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}, @timestamp}, state)
       end)
 
     assert output =~ " 192.0.2.1 mac    ping icmp "
@@ -113,7 +122,10 @@ defmodule NexPinger.ConsoleSubscriberTest do
       with_io(fn ->
         Enum.reduce(1..3, state, fn _, state ->
           {:noreply, state} =
-            ConsoleSubscriber.handle_info({:item_result, host, item, {:ok, 1.23}}, state)
+            ConsoleSubscriber.handle_info(
+              {:item_result, host, item, {:ok, 1.23}, @timestamp},
+              state
+            )
 
           state
         end)

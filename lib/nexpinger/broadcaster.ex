@@ -14,9 +14,13 @@ defmodule NexPinger.Broadcaster do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec publish(Host.t(), Item.t(), event()) :: :ok
-  def publish(%Host{} = host, %Item{} = item, event) do
-    GenServer.cast(__MODULE__, {:publish, host, item, event})
+  @doc """
+  Sends `{:item_result, host, item, event, timestamp}` to every subscriber. The timestamp is
+  when the result was taken, so a subscriber that handles it late still shows that time.
+  """
+  @spec publish(Host.t(), Item.t(), event(), String.t()) :: :ok
+  def publish(%Host{} = host, %Item{} = item, event, timestamp) when is_binary(timestamp) do
+    GenServer.cast(__MODULE__, {:publish, host, item, event, timestamp})
   end
 
   @spec subscribe(subscriber()) :: :ok | {:error, :not_found}
@@ -41,9 +45,9 @@ defmodule NexPinger.Broadcaster do
     {:noreply, %{state | subscribers: Enum.uniq([subscriber | subscribers])}}
   end
 
-  def handle_cast({:publish, host, item, event}, %{subscribers: subscribers} = state) do
+  def handle_cast({:publish, host, item, event, timestamp}, %{subscribers: subscribers} = state) do
     Enum.each(subscribers, fn subscriber ->
-      send(subscriber, {:item_result, host, item, event})
+      send(subscriber, {:item_result, host, item, event, timestamp})
     end)
 
     {:noreply, state}

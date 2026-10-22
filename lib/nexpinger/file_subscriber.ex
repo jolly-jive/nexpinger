@@ -103,10 +103,9 @@ defmodule NexPinger.FileSubscriber do
 
   @impl true
   def handle_info(
-        {:item_result, %Host{} = host, %Item{} = item, result},
+        {:item_result, %Host{} = host, %Item{} = item, result, timestamp},
         %{format: format, owner: owner, widths: widths} = state
       ) do
-    timestamp = Timestamp.now()
     path = file_path(state.path, state.rotate, timestamp)
     line = format_record(format, timestamp, host, item, result, widths)
 

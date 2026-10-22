@@ -5,7 +5,7 @@ defmodule NexPinger.ConsoleSubscriber do
 
   use GenServer
 
-  alias NexPinger.{Host, Item, ResultLine, Statistics, StatisticsView, TerminalInput, Timestamp}
+  alias NexPinger.{Host, Item, ResultLine, Statistics, StatisticsView, TerminalInput}
 
   @default_stats_window 1000
   @default_stats_width 80
@@ -103,7 +103,10 @@ defmodule NexPinger.ConsoleSubscriber do
   def handle_cast({:scroll, _direction}, state), do: {:noreply, state}
 
   @impl true
-  def handle_info({:item_result, %Host{} = host, %Item{} = item, {status, _} = result}, state)
+  def handle_info(
+        {:item_result, %Host{} = host, %Item{} = item, {status, _} = result, timestamp},
+        state
+      )
       when status in [:ok, :error] do
     if status == :error, do: IO.write("\a")
 
@@ -113,7 +116,7 @@ defmodule NexPinger.ConsoleSubscriber do
       if state.mode == :stats do
         schedule_stats_render(state)
       else
-        print_result(host, item, result, state.widths)
+        print_result(timestamp, host, item, result, state.widths)
         state
       end
 
@@ -183,8 +186,8 @@ defmodule NexPinger.ConsoleSubscriber do
   end
 
   # Some terminals (Windows) don't map "\n" to "\r\n" in raw mode, so write "\r\n".
-  defp print_result(host, item, result, widths) do
-    IO.write([ResultLine.format(Timestamp.now(), host, item, result, widths, :console), "\r\n"])
+  defp print_result(timestamp, host, item, result, widths) do
+    IO.write([ResultLine.format(timestamp, host, item, result, widths, :console), "\r\n"])
   end
 
   # Clearing first causes flicker. Instead: cursor to top-left, overwrite,

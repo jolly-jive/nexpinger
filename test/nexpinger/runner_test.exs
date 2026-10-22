@@ -12,7 +12,7 @@ defmodule NexPinger.RunnerTest do
 
     def init(owner), do: {:ok, %{owner: owner}}
 
-    def handle_info({:item_result, host, item, event}, %{owner: owner} = state) do
+    def handle_info({:item_result, host, item, event, _timestamp}, %{owner: owner} = state) do
       send(owner, {:named_result, host, item, event})
       {:noreply, state}
     end
@@ -52,9 +52,9 @@ defmodule NexPinger.RunnerTest do
     item = %Item{name: "icmp", type: :icmp, interval: 10, timeout: 100}
 
     Broadcaster.subscribe(self())
-    assert :ok = Broadcaster.publish(host, item, {:ok, 12.34})
+    assert :ok = Broadcaster.publish(host, item, {:ok, 12.34}, "2026-09-30 12:00:00.123")
 
-    assert_receive {:item_result, ^host, ^item, {:ok, 12.34}}
+    assert_receive {:item_result, ^host, ^item, {:ok, 12.34}, "2026-09-30 12:00:00.123"}
   end
 
   test "publishes probe result to a named subscriber" do
@@ -68,7 +68,7 @@ defmodule NexPinger.RunnerTest do
 
     {:ok, _pid} = NamedSubscriber.start_link(:named_subscriber_test, self())
     assert :ok = Broadcaster.subscribe(:named_subscriber_test)
-    assert :ok = Broadcaster.publish(host, item, {:ok, 7.89})
+    assert :ok = Broadcaster.publish(host, item, {:ok, 7.89}, "2026-09-30 12:00:00.123")
 
     assert_receive {:named_result, ^host, ^item, {:ok, 7.89}}
   end
@@ -87,7 +87,8 @@ defmodule NexPinger.RunnerTest do
     Broadcaster.subscribe(self())
     {:ok, pid} = Runner.start_link({host, item})
 
-    assert_receive {:item_result, %Host{name: "immediate-check"}, ^item, {:ok, _rtt}}, 1000
+    assert_receive {:item_result, %Host{name: "immediate-check"}, ^item, {:ok, _rtt}, _timestamp},
+                   1000
 
     Process.exit(pid, :kill)
   end
@@ -107,10 +108,18 @@ defmodule NexPinger.RunnerTest do
     Broadcaster.subscribe(self())
     {:ok, pid} = Runner.start_link({host, item})
 
-    assert_receive {:item_result, %Host{name: "raising-probe"}, ^item, {:error, reason}}, 1000
+    assert_receive {:item_result, %Host{name: "raising-probe"}, ^item, {:error, reason},
+                    timestamp},
+                   1000
+
     assert reason =~ "no function clause matching"
+    assert timestamp =~ ~r/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/
     refute reason =~ "\n"
-    assert_receive {:item_result, %Host{name: "raising-probe"}, ^item, {:error, _reason}}, 1000
+
+    assert_receive {:item_result, %Host{name: "raising-probe"}, ^item, {:error, _reason},
+                    _timestamp},
+                   1000
+
     assert Process.alive?(pid)
 
     Process.unlink(pid)
@@ -134,7 +143,10 @@ defmodule NexPinger.RunnerTest do
 
       item = %Item{name: "bogus", type: :bogus, interval: 5000, timeout: 100}
       {:ok, pid} = Runner.start_link({host, item})
-      assert_receive {:item_result, %Host{name: "mac-lookup-" <> _}, ^item, _result}, 1000
+
+      assert_receive {:item_result, %Host{name: "mac-lookup-" <> _}, ^item, _result, _timestamp},
+                     1000
+
       Process.unlink(pid)
       Process.exit(pid, :kill)
 
@@ -180,9 +192,9 @@ defmodule NexPinger.RunnerTest do
 
     assert :ok = Broadcaster.subscribe(self())
     assert :ok = Broadcaster.subscribe(:test_file_subscriber)
-    assert :ok = Broadcaster.publish(host, item, {:ok, 99.99})
+    assert :ok = Broadcaster.publish(host, item, {:ok, 99.99}, "2026-09-30 12:00:00.123")
 
-    assert_receive {:item_result, ^host, ^item, {:ok, 99.99}}
+    assert_receive {:item_result, ^host, ^item, {:ok, 99.99}, _timestamp}
     assert_receive {:file_written, ^path}
     assert {:ok, content} = File.read(path)
     assert String.contains?(content, "dual-output")
@@ -206,8 +218,8 @@ defmodule NexPinger.RunnerTest do
 
     {:ok, mac_pid} = NexPinger.FileSubscriber.start_link(path: mac_path, owner: self())
     {:ok, no_mac_pid} = NexPinger.FileSubscriber.start_link(path: no_mac_path, owner: self())
-    send(mac_pid, {:item_result, with_mac, item, {:ok, 1.23}})
-    send(no_mac_pid, {:item_result, without_mac, item, {:ok, 1.23}})
+    send(mac_pid, {:item_result, with_mac, item, {:ok, 1.23}, "2026-09-30 12:00:00.123"})
+    send(no_mac_pid, {:item_result, without_mac, item, {:ok, 1.23}, "2026-09-30 12:00:00.123"})
 
     assert_receive {:file_written, ^mac_path}
     assert_receive {:file_written, ^no_mac_path}
