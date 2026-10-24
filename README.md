@@ -304,6 +304,10 @@ timestamp	host	address	resolved	mac	item	type	port	status	rtt_ms	error
 
 There is no built-in graphing. For charts, feed TSV / JSON Lines logs to an external tool (Excel, Livebook, etc.).
 
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for the process layout and how results flow from probes to the console and the log file.
+
 ## Known issues
 
 - On Windows, the escript (`nexpinger`) shows the Erlang VM's BREAK menu on `Ctrl+C`. Type `a` and Enter to quit. `nexpinger.exe` does not have this problem
