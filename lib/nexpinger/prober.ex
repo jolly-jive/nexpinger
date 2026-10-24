@@ -105,7 +105,7 @@ defmodule NexPinger.Prober do
       path ->
         case run_command(path, icmp_args(address, timeout), ping_env(), timeout + 500) do
           {:ok, output, 0} -> parse_ping_time(output, :os.type(), address)
-          {:ok, _output, _exit_code} -> {:error, "unreachable"}
+          {:ok, output, exit_code} -> {:error, ping_failure(output, :os.type(), exit_code)}
           :timeout -> {:error, "timeout"}
         end
     end
@@ -211,7 +211,9 @@ defmodule NexPinger.Prober do
   # IPv6 replies have no TTL=. Take the first "=<n>" or "<<n>" after "<address>...:" on the
   # reply line, e.g. "Reply from ::1: time<1ms", "::1 からの応答: 時間 <1ms".
   # The address lines before and after (header, statistics) have no "=<n>".
-  # "Destination host unreachable" lines have neither, so they count as failures.
+  # ping.exe exits 0 when an ICMP error comes back ("Destination host unreachable",
+  # "TTL expired in transit"); those lines have neither, so they count as unreachable.
+  # The localized text can't tell the two apart.
   @doc false
   @spec parse_ping_time(binary(), {atom(), atom()}, String.t()) :: result()
   def parse_ping_time(output, {:win32, _}, address) do
@@ -222,7 +224,7 @@ defmodule NexPinger.Prober do
 
     case Regex.run(pattern, output) do
       [_, ms] -> {:ok, String.to_integer(ms) * 1.0}
-      nil -> {:error, "no reply"}
+      nil -> {:error, "unreachable"}
     end
   end
 
@@ -230,6 +232,25 @@ defmodule NexPinger.Prober do
     case Regex.run(~r/time[=<]([\d.]+)\s*ms/i, output) do
       [_, ms] -> {:ok, String.to_float(normalize_float(ms))}
       nil -> {:error, "no reply"}
+    end
+  end
+
+  # Reason for a non-zero exit.
+  # Windows: ping.exe exits 1 only when no reply came back (ICMP errors exit 0).
+  # Unix (LC_ALL=C): an ICMP error prints a "From <router> ..." line, e.g. iputils
+  # "Time to live exceeded", "Time exceeded: Hop limit", "Destination Host Unreachable",
+  # "Destination unreachable: Address unreachable"; with none, a "0 received" summary is
+  # a timeout (macOS: "0 packets received").
+  @doc false
+  @spec ping_failure(binary(), {atom(), atom()}, pos_integer()) :: String.t()
+  def ping_failure(_output, {:win32, _}, _exit_code), do: "timeout"
+
+  def ping_failure(output, _os_type, exit_code) do
+    cond do
+      output =~ ~r/time to live exceeded|hop limit/i -> "ttl expired"
+      output =~ ~r/unreachable|no route to host/i -> "unreachable"
+      output =~ ~r/\b0 (packets )?received/ -> "timeout"
+      true -> "ping failed (exit #{exit_code})"
     end
   end
 

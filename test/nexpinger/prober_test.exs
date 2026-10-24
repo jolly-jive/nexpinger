@@ -52,9 +52,14 @@ defmodule NexPinger.ProberTest do
       end
     end
 
-    test "treats a destination unreachable reply as no reply" do
-      output = "192.168.1.1 からの応答: 宛先ホストに到達できません。"
-      assert Prober.parse_ping_time(output, @windows, "8.8.8.8") == {:error, "no reply"}
+    test "treats an ICMP error reply as unreachable" do
+      for output <- [
+            "192.168.1.1 からの応答: 宛先ホストに到達できません。",
+            "192.168.0.1 からの応答: 転送中に TTL が期限切れになりました。"
+          ] do
+        assert Prober.parse_ping_time(output, @windows, "8.8.8.8") == {:error, "unreachable"},
+               output
+      end
     end
 
     test "works on OEM code page (non UTF-8) output" do
@@ -93,7 +98,7 @@ defmodule NexPinger.ProberTest do
           Minimum = 0ms, Maximum = 0ms, Average = 0ms
       """
 
-      assert Prober.parse_ping_time(output, @windows, "2001:db8::1") == {:error, "no reply"}
+      assert Prober.parse_ping_time(output, @windows, "2001:db8::1") == {:error, "unreachable"}
     end
 
     test "parses a full reply" do
@@ -113,6 +118,66 @@ defmodule NexPinger.ProberTest do
     test "parses iputils output with LC_ALL=C" do
       output = "64 bytes from 127.0.0.1: icmp_seq=1 ttl=64 time=0.045 ms"
       assert Prober.parse_ping_time(output, {:unix, :linux}, "127.0.0.1") == {:ok, 0.045}
+    end
+  end
+
+  describe "ping_failure/3" do
+    @linux {:unix, :linux}
+
+    test "Windows: a non-zero exit means no reply came back" do
+      output = """
+      192.0.2.1 に ping を送信しています 32 バイトのデータ:
+      要求がタイムアウトしました。
+      """
+
+      assert Prober.ping_failure(output, {:win32, :nt}, 1) == "timeout"
+    end
+
+    # Outputs of iputils ping with LC_ALL=C
+    test "Unix: no reply is a timeout" do
+      output = """
+      PING 192.0.2.1 (192.0.2.1) 56(84) bytes of data.
+
+      --- 192.0.2.1 ping statistics ---
+      1 packets transmitted, 0 received, 100% packet loss, time 0ms
+      """
+
+      assert Prober.ping_failure(output, @linux, 1) == "timeout"
+
+      macos = "1 packets transmitted, 0 packets received, 100.0% packet loss"
+      assert Prober.ping_failure(macos, {:unix, :darwin}, 2) == "timeout"
+    end
+
+    test "Unix: Time Exceeded is ttl expired" do
+      for line <- [
+            "From 192.168.0.1 icmp_seq=1 Time to live exceeded",
+            "From 2001:db8::1 icmp_seq=1 Time exceeded: Hop limit"
+          ] do
+        output = """
+        #{line}
+
+        --- 8.8.8.8 ping statistics ---
+        1 packets transmitted, 0 received, +1 errors, 100% packet loss, time 0ms
+        """
+
+        assert Prober.ping_failure(output, @linux, 1) == "ttl expired", line
+      end
+    end
+
+    test "Unix: Destination Unreachable is unreachable" do
+      for line <- [
+            "From 192.168.0.130 icmp_seq=1 Destination Host Unreachable",
+            "From 2001:db8::1 icmp_seq=1 Destination unreachable: Address unreachable",
+            "ping: connect: Network is unreachable",
+            "ping: sendto: No route to host"
+          ] do
+        assert Prober.ping_failure(line, @linux, 1) == "unreachable", line
+      end
+    end
+
+    test "Unix: other failures show the exit status" do
+      output = "ping: socket: Operation not permitted"
+      assert Prober.ping_failure(output, @linux, 2) == "ping failed (exit 2)"
     end
   end
 
