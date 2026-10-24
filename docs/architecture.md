@@ -104,6 +104,10 @@ graph LR
   `{:results_dropped, ...}` and then results again.
 - A restarted subscriber has a new pid. The `Broadcaster` drops the old one on `:DOWN`, and the
   new one subscribes again itself (`subscribe: true`).
+- A restarted `Broadcaster` has no subscribers (the supervisor is `one_for_one`, so the
+  subscribers keep running). Subscribers subscribe with `Broadcaster.follow/1`, which also
+  monitors the `Broadcaster`; on its `:DOWN` they subscribe to the new one, retrying every
+  100 ms until it is registered. Results in the old one's mailbox are lost.
 
 ## Key input and exit
 

@@ -102,6 +102,10 @@ graph LR
   `{:results_dropped, ...}` を送り、配信を再開する
 - 再起動した Subscriber は pid が変わる。`Broadcaster` は `:DOWN` で古い pid を外し、新しいプロセスが
   自分で subscribe し直す（`subscribe: true`）
+- 再起動した `Broadcaster` は Subscriber を持たない（Supervisor は `one_for_one` なので Subscriber は
+  動き続ける）。Subscriber は `Broadcaster.follow/1` で subscribe し、同時に `Broadcaster` を監視する。
+  その `:DOWN` を受けたら新しい `Broadcaster` に subscribe し直す（登録されるまで 100 ms ごとに再試行）。
+  古い `Broadcaster` の mailbox にあった結果は失われる
 
 ## キー入力と終了
 

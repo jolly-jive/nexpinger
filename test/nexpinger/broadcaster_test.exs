@@ -2,7 +2,7 @@ defmodule NexPinger.BroadcasterTest do
   # Counts a subscriber's mailbox: no other test may publish meanwhile
   use ExUnit.Case, async: false
 
-  alias NexPinger.{Broadcaster, Host, Item}
+  alias NexPinger.{Broadcaster, ConsoleSubscriber, FileSubscriber, Host, Item}
 
   @timestamp "2026-09-30 12:00:00.123"
 
@@ -132,6 +132,78 @@ defmodule NexPinger.BroadcasterTest do
 
     test "rejects a cap that is not a positive integer" do
       assert_raise ArgumentError, fn -> Broadcaster.subscribe(self(), max_queue: 0) end
+    end
+  end
+
+  describe "follow/1" do
+    test "subscribes and monitors the Broadcaster" do
+      host = %Host{name: "follow", address: "192.0.2.1", items: []}
+      item = %Item{name: "ping", type: :icmp}
+      broadcaster = Process.whereis(Broadcaster)
+
+      ref = Broadcaster.follow()
+      assert {:monitors, monitors} = Process.info(self(), :monitors)
+      assert {:process, broadcaster} in monitors
+
+      Broadcaster.publish(host, item, {:ok, 1.0}, @timestamp)
+      assert_receive {:item_result, ^host, ^item, {:ok, 1.0}, @timestamp}
+      Process.demonitor(ref, [:flush])
+    end
+
+    test "asks to be called again while the Broadcaster is not running" do
+      broadcaster = Process.whereis(Broadcaster)
+      Process.unregister(Broadcaster)
+
+      try do
+        assert Broadcaster.follow() == nil
+        assert_receive :follow_broadcaster, 1000
+      after
+        Process.register(broadcaster, Broadcaster)
+      end
+    end
+  end
+
+  describe "a restarted Broadcaster" do
+    @describetag :tmp_dir
+
+    # The only test that kills the Broadcaster: the application's supervisor restarts it
+    test "keeps sending results to the subscribers", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "monitor.log")
+      widths = %{ip: 0, item: 0, port: 0}
+      console = start_supervised!({ConsoleSubscriber, subscribe: true})
+
+      file =
+        start_supervised!(
+          {FileSubscriber, path: path, owner: self(), widths: widths, subscribe: true}
+        )
+
+      old = Process.whereis(Broadcaster)
+      assert eventually(fn -> Map.has_key?(subscribers(), file) end)
+
+      ref = Process.monitor(old)
+      Process.exit(old, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^old, :killed}
+
+      assert eventually(fn ->
+               case Process.whereis(Broadcaster) do
+                 nil ->
+                   false
+
+                 ^old ->
+                   false
+
+                 _new ->
+                   Map.has_key?(subscribers(), console) and Map.has_key?(subscribers(), file)
+               end
+             end)
+
+      assert Process.alive?(console)
+      host = %Host{name: "gateway", address: "192.0.2.1", items: []}
+      item = %Item{name: "ping", type: :icmp}
+      # Only the file subscriber: the console one would print to the test output
+      stop_supervised!(ConsoleSubscriber)
+      Broadcaster.publish(host, item, {:ok, 1.5}, @timestamp)
+      assert_receive {:file_written, ^path}
     end
   end
 
