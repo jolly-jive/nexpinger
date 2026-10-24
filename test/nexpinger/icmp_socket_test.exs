@@ -44,4 +44,18 @@ defmodule NexPinger.IcmpSocketTest do
       end
     end
   end
+
+  # The first router returns Time Exceeded, which needs IP_RECVERR to reach the socket
+  describe "with TTL 1" do
+    @describetag :network
+
+    test "IPv4 reports ttl expired, not a timeout" do
+      assert IcmpSocket.ping({8, 8, 8, 8}, 2000, ttl: 1) == {:error, "ttl expired"}
+    end
+
+    test "IPv6 reports ttl expired, not a timeout" do
+      assert IcmpSocket.ping({0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888}, 2000, ttl: 1) ==
+               {:error, "ttl expired"}
+    end
+  end
 end
