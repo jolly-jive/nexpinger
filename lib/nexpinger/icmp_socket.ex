@@ -10,7 +10,7 @@ defmodule NexPinger.IcmpSocket do
 
   import Bitwise
 
-  alias NexPinger.Resolver
+  alias NexPinger.{ErrorQueue, Resolver}
 
   @echo_request_v4 8
   @echo_reply_v4 0
@@ -20,12 +20,16 @@ defmodule NexPinger.IcmpSocket do
 
   @type result :: {:ok, rtt_ms :: float()} | {:error, String.t()} | {:error, :unavailable}
 
-  @spec ping(:inet.ip_address(), non_neg_integer()) :: result()
-  def ping(ip, timeout_ms) do
+  # opts (for tests): ttl: sets the TTL / hop limit
+  @spec ping(:inet.ip_address(), non_neg_integer(), keyword()) :: result()
+  def ping(ip, timeout_ms, opts \\ []) do
     family = Resolver.socket_family(ip)
 
     with {:ok, socket} <- open(family) do
       try do
+        # Without it, router errors (Time Exceeded, Host Unreachable) end as timeouts
+        _ = ErrorQueue.enable(socket, family)
+        if ttl = opts[:ttl], do: set_ttl(socket, family, ttl)
         echo(socket, family, ip, timeout_ms)
       after
         :socket.close(socket)
@@ -48,6 +52,9 @@ defmodule NexPinger.IcmpSocket do
         {:error, unavailable_reason(reason, family)}
     end
   end
+
+  defp set_ttl(socket, :inet, ttl), do: :ok = :socket.setopt(socket, {:ip, :ttl}, ttl)
+  defp set_ttl(socket, :inet6, ttl), do: :ok = :socket.setopt(socket, {:ipv6, :unicast_hops}, ttl)
 
   defp open(family) do
     case open_socket(family) do
@@ -94,12 +101,13 @@ defmodule NexPinger.IcmpSocket do
     started = System.monotonic_time(:microsecond)
     deadline = started + timeout_ms * 1000
 
-    # Once connected, Destination Unreachable arrives as a socket error
+    # Once connected (and with IP_RECVERR), Destination Unreachable and Time Exceeded
+    # arrive as socket errors
     with :ok <- :socket.connect(socket, %{family: family, addr: ip, port: 0}),
          :ok <- :socket.send(socket, packet, timeout_ms) do
       await_reply(socket, reply_type, seq, payload, started, deadline)
     else
-      {:error, reason} -> {:error, error_message(reason)}
+      {:error, reason} -> failure(socket, reason)
     end
   end
 
@@ -127,8 +135,17 @@ defmodule NexPinger.IcmpSocket do
   defp handle_recv({:error, :timeout}, _socket, _type, _seq, _payload, _started, _deadline),
     do: {:error, "timeout"}
 
-  defp handle_recv({:error, reason}, _socket, _type, _seq, _payload, _started, _deadline),
-    do: {:error, error_message(reason)}
+  defp handle_recv({:error, reason}, socket, _type, _seq, _payload, _started, _deadline),
+    do: failure(socket, reason)
+
+  defp failure(_socket, :timeout), do: {:error, "timeout"}
+
+  defp failure(socket, reason) do
+    case ErrorQueue.cause(socket) do
+      :ttl_expired -> {:error, "ttl expired"}
+      :other -> {:error, error_message(reason)}
+    end
+  end
 
   @doc false
   @spec reply?(binary(), non_neg_integer(), non_neg_integer(), binary()) :: boolean()
@@ -164,6 +181,5 @@ defmodule NexPinger.IcmpSocket do
        when reason in [:ehostunreach, :enetunreach, :econnrefused, :ehostdown, :enetdown],
        do: "unreachable"
 
-  defp error_message(:timeout), do: "timeout"
   defp error_message(reason), do: inspect(reason)
 end

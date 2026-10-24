@@ -67,4 +67,18 @@ defmodule NexPinger.UdpProbeTest do
       assert UdpProbe.probe({127, 0, 0, 1}, :dns, port, 1000) == {:error, "port unreachable"}
     end
   end
+
+  # Linux only: the first router returns Time Exceeded, which needs IP_RECVERR to reach the socket
+  describe "probe/5 with TTL 1" do
+    @describetag :network
+
+    test "IPv4 reports ttl expired, not a timeout" do
+      assert UdpProbe.probe({8, 8, 8, 8}, :dns, 53, 2000, ttl: 1) == {:error, "ttl expired"}
+    end
+
+    test "IPv6 reports ttl expired, not a timeout" do
+      ip = {0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888}
+      assert UdpProbe.probe(ip, :dns, 53, 2000, ttl: 1) == {:error, "ttl expired"}
+    end
+  end
 end

@@ -210,6 +210,7 @@ hosts:
 ### ICMP 監視
 
 - Echo Request を1つ送り、対応する Echo Reply が `timeout` までに返れば OK です
+- `timeout` までに応答がなければ NG（`timeout`）です。ICMP ソケット（Linux）と `icmp_helper.exe`（Windows）では、対象ホストや経路上のルーターが返す ICMP エラーはすぐに NG になります。Destination Unreachable は `unreachable`、Time Exceeded（経路のループなど）は `ttl expired` です。`ping` コマンドでは、原因によらず `ping` が失敗すれば `unreachable` です
 - RTT の刻みは送信方法によって違います。ICMP ソケットと `icmp_helper.exe` は 1 ms 未満も計測します。`ping` コマンドでは表示された値をそのまま使うため、Windows の `ping.exe` では 1 ms 刻みになり、`<1ms` は 1 ms として扱います
 
 ### TCP 監視
@@ -232,6 +233,7 @@ UDP 監視では、サービスが応答する要求を送り、**応答の有�
 - RTT は要求の送信から最初の応答までの時間で、相手サーバの処理時間を含みます。RD=0 のため、DNS フルリゾルバは再帰問い合わせをせずキャッシュから応答（または拒否）し、RTT に再帰の時間は含まれません
 - `timeout` までに応答がなければ NG（`timeout`）です
 - ICMP Port Unreachable は UDP の応答ではないため NG（`port unreachable`）とします。TCP で RST を NG（`connection refused`）とするのと同じ扱いです。対象ホスト自身ではなくファイアウォール（iptables の `REJECT` など）が返すこともあります
+- Linux では、経路上のルーターが返す ICMP エラーもすぐに NG になります。`host unreachable`、`network unreachable`、または `ttl expired`（Time Exceeded）です。ほかの OS では、これらが `timeout` になることがあります
 - 公開 NTP サーバの多くは問い合わせ頻度を制限しており、頻繁に問い合わせると Kiss-o'-Death を返したり要求を破棄したりします。そのため NTP の Item の `interval` は省略時 8000 ミリ秒とし、8000 ミリ秒未満を指定した場合は起動時に警告を表示します。自分で管理していないサーバには 8000 ミリ秒以上を指定してください
 
 ### hosts 形式

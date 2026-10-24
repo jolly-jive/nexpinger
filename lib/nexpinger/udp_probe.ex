@@ -5,7 +5,7 @@ defmodule NexPinger.UdpProbe do
   any UDP reply from the target as OK. The reply content is not checked.
   """
 
-  alias NexPinger.Resolver
+  alias NexPinger.{ErrorQueue, Resolver}
 
   @type service :: :dns | :ntp | :quic
   @type result :: {:ok, rtt_ms :: float()} | {:error, reason :: String.t()}
@@ -26,14 +26,25 @@ defmodule NexPinger.UdpProbe do
 
   # A new socket per attempt, connected to the target: the OS drops datagrams
   # from other sources, and late replies to an earlier attempt can't arrive here.
-  @spec probe(:inet.ip_address(), service(), :inet.port_number(), non_neg_integer()) :: result()
-  def probe(ip, service, port, timeout_ms) do
+  # Linux uses :socket for IP_RECVERR (`NexPinger.ErrorQueue`), which gen_udp lacks;
+  # without it, router errors (Time Exceeded, Host Unreachable) end as timeouts.
+  # opts (for tests, Linux only): ttl: sets the TTL / hop limit
+  @spec probe(:inet.ip_address(), service(), :inet.port_number(), non_neg_integer(), keyword()) ::
+          result()
+  def probe(ip, service, port, timeout_ms, opts \\ []) do
     family = Resolver.socket_family(ip)
 
+    case :os.type() do
+      {:unix, :linux} -> socket_probe(family, ip, port, payload(service), timeout_ms, opts)
+      _ -> gen_udp_probe(family, ip, port, payload(service), timeout_ms)
+    end
+  end
+
+  defp gen_udp_probe(family, ip, port, packet, timeout_ms) do
     case :gen_udp.open(0, [:binary, family, active: false]) do
       {:ok, socket} ->
         try do
-          exchange(socket, ip, port, payload(service), timeout_ms)
+          gen_udp_exchange(socket, ip, port, packet, timeout_ms)
         after
           :gen_udp.close(socket)
         end
@@ -43,7 +54,7 @@ defmodule NexPinger.UdpProbe do
     end
   end
 
-  defp exchange(socket, ip, port, packet, timeout_ms) do
+  defp gen_udp_exchange(socket, ip, port, packet, timeout_ms) do
     started = System.monotonic_time(:microsecond)
 
     with :ok <- :gen_udp.connect(socket, ip, port),
@@ -54,6 +65,47 @@ defmodule NexPinger.UdpProbe do
       {:error, reason} -> {:error, error_message(reason)}
     end
   end
+
+  defp socket_probe(family, ip, port, packet, timeout_ms, opts) do
+    case :socket.open(family, :dgram, :udp) do
+      {:ok, socket} ->
+        try do
+          _ = ErrorQueue.enable(socket, family)
+          if ttl = opts[:ttl], do: set_ttl(socket, family, ttl)
+          socket_exchange(socket, %{family: family, addr: ip, port: port}, packet, timeout_ms)
+        after
+          :socket.close(socket)
+        end
+
+      {:error, reason} ->
+        {:error, error_message(reason)}
+    end
+  end
+
+  defp socket_exchange(socket, address, packet, timeout_ms) do
+    started = System.monotonic_time(:microsecond)
+
+    # Bind before connecting, as gen_udp.open(0) does. Under WSL2 mirrored networking,
+    # loopback datagrams from an auto-bound socket never reach Linux's own sockets.
+    with :ok <- :socket.bind(socket, :any),
+         :ok <- :socket.connect(socket, address),
+         :ok <- :socket.send(socket, packet, timeout_ms),
+         {:ok, _reply} <- :socket.recv(socket, 0, timeout_ms) do
+      {:ok, (System.monotonic_time(:microsecond) - started) / 1000.0}
+    else
+      {:error, :timeout} ->
+        {:error, "timeout"}
+
+      {:error, reason} ->
+        case ErrorQueue.cause(socket) do
+          :ttl_expired -> {:error, "ttl expired"}
+          :other -> {:error, error_message(reason)}
+        end
+    end
+  end
+
+  defp set_ttl(socket, :inet, ttl), do: :ok = :socket.setopt(socket, {:ip, :ttl}, ttl)
+  defp set_ttl(socket, :inet6, ttl), do: :ok = :socket.setopt(socket, {:ipv6, :unicast_hops}, ttl)
 
   # ICMP Port Unreachable: Linux reports econnrefused, Windows econnreset
   defp error_message(reason) when reason in [:econnrefused, :econnreset], do: "port unreachable"
