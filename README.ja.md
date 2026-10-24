@@ -210,7 +210,7 @@ hosts:
 ### ICMP 監視
 
 - Echo Request を1つ送り、対応する Echo Reply が `timeout` までに返れば OK です
-- `timeout` までに応答がなければ NG（`timeout`）です。ICMP ソケット（Linux）と `icmp_helper.exe`（Windows）では、対象ホストや経路上のルーターが返す ICMP エラーはすぐに NG になります。Destination Unreachable は `unreachable`、Time Exceeded（経路のループなど）は `ttl expired` です。`ping` コマンドでは、原因によらず `ping` が失敗すれば `unreachable` です
+- `timeout` までに応答がなければ NG（`timeout`）です。ICMP ソケット（Linux）と `icmp_helper.exe`（Windows）では、対象ホストや経路上のルーターが返す ICMP エラーはすぐに NG になります。Destination Unreachable は `unreachable`、Time Exceeded（経路のループなど）は `ttl expired` です。Linux と macOS の `ping` コマンドでも同じように区別します。Windows の `ping.exe` はメッセージが翻訳されるため、どちらも `unreachable` になります。それ以外の理由で `ping` が失敗した場合は `ping failed (exit <終了コード>)` です
 - RTT の刻みは送信方法によって違います。ICMP ソケットと `icmp_helper.exe` は 1 ms 未満も計測します。`ping` コマンドでは表示された値をそのまま使うため、Windows の `ping.exe` では 1 ms 刻みになり、`<1ms` は 1 ms として扱います
 
 ### TCP 監視

@@ -210,7 +210,7 @@ hosts:
 ### ICMP checks
 
 - Sends one Echo Request. OK if the matching Echo Reply comes back within `timeout`
-- No reply within `timeout` is NG (`timeout`). With the ICMP socket (Linux) and `icmp_helper.exe` (Windows), an ICMP error from the target or a router on the path is NG at once: `unreachable` (Destination Unreachable) or `ttl expired` (Time Exceeded, e.g. a routing loop). With the `ping` command, a failed `ping` is `unreachable`, whatever the cause
+- No reply within `timeout` is NG (`timeout`). With the ICMP socket (Linux) and `icmp_helper.exe` (Windows), an ICMP error from the target or a router on the path is NG at once: `unreachable` (Destination Unreachable) or `ttl expired` (Time Exceeded, e.g. a routing loop). The `ping` command on Linux and macOS reports them the same way. Windows `ping.exe` localizes its messages, so both are `unreachable` there. Any other `ping` failure is `ping failed (exit <status>)`
 - RTT resolution depends on the method. The ICMP socket and `icmp_helper.exe` measure below 1 ms. The `ping` command's printed value is used as is, so with Windows `ping.exe` the RTT is in whole ms, and `<1ms` counts as 1 ms
 
 ### TCP checks
