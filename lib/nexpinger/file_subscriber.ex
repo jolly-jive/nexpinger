@@ -18,7 +18,8 @@ defmodule NexPinger.FileSubscriber do
   (the count and the first time in the error column), and stderr tells the total.
 
   The CLI starts it under `NexPinger.SubscriberSupervisor` with `subscribe: true`, so a restarted
-  subscriber subscribes to the Broadcaster again.
+  subscriber subscribes to the Broadcaster again. If the Broadcaster restarts instead, this
+  subscriber subscribes to the new one.
   """
 
   use GenServer
@@ -91,12 +92,9 @@ defmodule NexPinger.FileSubscriber do
       owner: Keyword.get(opts, :owner),
       widths: Keyword.get(opts, :widths, ResultLine.widths([])),
       rotate: Keyword.get(opts, :rotate),
-      failed?: false
+      failed?: false,
+      broadcaster: if(Keyword.get(opts, :subscribe, false), do: follow_broadcaster())
     }
-
-    if Keyword.get(opts, :subscribe, false) do
-      Broadcaster.subscribe(self(), max_queue: @max_queue)
-    end
 
     # Stopping here would fail a restart, and enough of them stop the supervisor.
     # The CLI checks the path with prepare/2 before the first start.
@@ -137,6 +135,17 @@ defmodule NexPinger.FileSubscriber do
 
     {:noreply, state}
   end
+
+  # The Broadcaster exited (it restarts with no subscribers) or was not running yet
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{broadcaster: ref} = state) do
+    {:noreply, %{state | broadcaster: follow_broadcaster()}}
+  end
+
+  def handle_info(:follow_broadcaster, state) do
+    {:noreply, %{state | broadcaster: follow_broadcaster()}}
+  end
+
+  defp follow_broadcaster, do: Broadcaster.follow(max_queue: @max_queue)
 
   defp write_record(%{format: format, owner: owner} = state, timestamp, host, item, result) do
     path = file_path(state.path, state.rotate, timestamp)

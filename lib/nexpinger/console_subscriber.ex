@@ -4,7 +4,8 @@ defmodule NexPinger.ConsoleSubscriber do
 
   The CLI starts it under `NexPinger.SubscriberSupervisor` with the hosts, the stats options and
   `subscribe: true`, so a restarted subscriber gets its settings back and subscribes to the
-  Broadcaster again. The statistics start over.
+  Broadcaster again. The statistics start over. If the Broadcaster restarts instead, this
+  subscriber subscribes to the new one and keeps its statistics.
 
   If the terminal stops taking output (a selection in a conhost window, Ctrl+S, a stopped pipe),
   the Broadcaster drops results once 1000 wait. When output moves again, each target gets a
@@ -58,12 +59,11 @@ defmodule NexPinger.ConsoleSubscriber do
       :persistent_term.put(@stats_view, false)
     end
 
-    if Keyword.get(opts, :subscribe, false) do
-      Broadcaster.subscribe(self())
-    end
+    broadcaster = if Keyword.get(opts, :subscribe, false), do: Broadcaster.follow()
 
     {:ok,
      %{
+       broadcaster: broadcaster,
        statistics: Statistics.new(hosts, Keyword.get(opts, :stats_window, @default_stats_window)),
        stats_size: Keyword.get(opts, :stats_size, &TerminalInput.stats_size/0),
        fixed_width: Keyword.get(opts, :fixed_width),
@@ -145,6 +145,15 @@ defmodule NexPinger.ConsoleSubscriber do
       end
 
     {:noreply, state}
+  end
+
+  # The Broadcaster exited (it restarts with no subscribers) or was not running yet
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{broadcaster: ref} = state) do
+    {:noreply, %{state | broadcaster: Broadcaster.follow()}}
+  end
+
+  def handle_info(:follow_broadcaster, state) do
+    {:noreply, %{state | broadcaster: Broadcaster.follow()}}
   end
 
   # A changed size redraws from a cleared screen, so nothing of the old layout stays.

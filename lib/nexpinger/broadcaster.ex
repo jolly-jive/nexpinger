@@ -4,6 +4,8 @@ defmodule NexPinger.Broadcaster do
 
   Subscribers are monitored and dropped when they exit. A restarted subscriber has a new pid,
   so it subscribes again itself (see `NexPinger.FileSubscriber` and `NexPinger.ConsoleSubscriber`).
+  A restarted Broadcaster starts with no subscribers, so they subscribe with `follow/1`, which
+  also monitors the Broadcaster, and call it again on its `:DOWN`.
 
   A subscriber that falls behind (a blocked terminal, a stalled network share) would grow its
   mailbox without bound. So each subscriber has a cap (`:max_queue`): while its mailbox holds
@@ -27,6 +29,8 @@ defmodule NexPinger.Broadcaster do
         }
 
   @default_max_queue 1000
+  # follow/1 retry interval (ms) while the Broadcaster is not running
+  @follow_retry_interval 100
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -49,13 +53,7 @@ defmodule NexPinger.Broadcaster do
   def subscribe(subscriber, opts \\ [])
 
   def subscribe(subscriber, opts) when is_pid(subscriber) do
-    max_queue = Keyword.get(opts, :max_queue, @default_max_queue)
-
-    unless is_integer(max_queue) and max_queue > 0 do
-      raise ArgumentError, "invalid max_queue: #{inspect(max_queue)}"
-    end
-
-    GenServer.cast(__MODULE__, {:subscribe, subscriber, max_queue})
+    GenServer.cast(__MODULE__, {:subscribe, subscriber, max_queue(opts)})
   end
 
   def subscribe(subscriber, opts) when is_atom(subscriber) do
@@ -63,6 +61,40 @@ defmodule NexPinger.Broadcaster do
       nil -> {:error, :not_found}
       pid -> subscribe(pid, opts)
     end
+  end
+
+  @doc """
+  Subscribes the calling process (options as in `subscribe/2`) and monitors the Broadcaster.
+  Returns the monitor reference: on its `:DOWN` (the Broadcaster exited and lost its
+  subscribers), call this again. If the Broadcaster is not running (it is restarting), returns
+  nil and sends the caller `:follow_broadcaster` after #{@follow_retry_interval} ms, to call
+  this again.
+  """
+  @spec follow(keyword()) :: reference() | nil
+  def follow(opts \\ []) do
+    max_queue = max_queue(opts)
+
+    case Process.whereis(__MODULE__) do
+      nil ->
+        Process.send_after(self(), :follow_broadcaster, @follow_retry_interval)
+        nil
+
+      pid ->
+        # Monitor first: if pid exits before the subscribe, its :DOWN still comes
+        ref = Process.monitor(pid)
+        GenServer.cast(pid, {:subscribe, self(), max_queue})
+        ref
+    end
+  end
+
+  defp max_queue(opts) do
+    max_queue = Keyword.get(opts, :max_queue, @default_max_queue)
+
+    unless is_integer(max_queue) and max_queue > 0 do
+      raise ArgumentError, "invalid max_queue: #{inspect(max_queue)}"
+    end
+
+    max_queue
   end
 
   @impl true
