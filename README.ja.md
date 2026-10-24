@@ -304,6 +304,10 @@ timestamp	host	address	resolved	mac	item	type	port	status	rtt_ms	error
 
 グラフ表示などの可視化機能は内蔵していません。TSV / JSON Lines のログを外部ツール（Excel、Livebook など）に読み込んで行う想定です。
 
+## アーキテクチャ
+
+プロセス構成と、プローブの結果がコンソール・ログファイルに届くまでの流れは [docs/architecture.ja.md](docs/architecture.ja.md) を参照。
+
 ## 既知の問題
 
 - Windows の escript 版（`nexpinger`）では、`Ctrl+C` を押すと Erlang VM の BREAK メニューが表示される。`a` を入力して Enter で終了できる。`nexpinger.exe` ではこの問題は起きない
