@@ -5,9 +5,7 @@ defmodule NexPinger.MacResolverTest do
 
   describe "parse_ip_neigh/1" do
     test "takes the lladdr of IPv4 and IPv6 entries, STALE included" do
-      assert MacResolver.parse_ip_neigh(
-               "192.168.0.1 dev eth0 lladdr 00:00:5E:00:53:01 REACHABLE\n"
-             ) ==
+      assert MacResolver.parse_ip_neigh("192.0.2.1 dev eth0 lladdr 00:00:5E:00:53:01 REACHABLE\n") ==
                "00:00:5e:00:53:01"
 
       assert MacResolver.parse_ip_neigh(
@@ -17,8 +15,8 @@ defmodule NexPinger.MacResolverTest do
     end
 
     test "nil for entries without lladdr or no entry" do
-      assert MacResolver.parse_ip_neigh("192.168.0.9 dev eth0 FAILED\n") == nil
-      assert MacResolver.parse_ip_neigh("192.168.0.9 dev eth0 INCOMPLETE\n") == nil
+      assert MacResolver.parse_ip_neigh("192.0.2.9 dev eth0 FAILED\n") == nil
+      assert MacResolver.parse_ip_neigh("192.0.2.9 dev eth0 INCOMPLETE\n") == nil
       assert MacResolver.parse_ip_neigh("") == nil
     end
   end
@@ -26,9 +24,9 @@ defmodule NexPinger.MacResolverTest do
   test "parse_arp/1 reads Windows arp -a output" do
     output = """
 
-    Interface: 192.168.0.130 --- 0x5
+    Interface: 192.0.2.130 --- 0x5
       Internet Address      Physical Address      Type
-      192.168.0.1           00-00-5e-00-53-01     dynamic
+      192.0.2.1           00-00-5e-00-53-01     dynamic
     """
 
     assert MacResolver.parse_arp(output) == "00:00:5e:00:53:01"

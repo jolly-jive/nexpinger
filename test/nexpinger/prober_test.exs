@@ -55,7 +55,7 @@ defmodule NexPinger.ProberTest do
     test "treats an ICMP error reply as unreachable" do
       for output <- [
             "192.168.1.1 からの応答: 宛先ホストに到達できません。",
-            "192.168.0.1 からの応答: 転送中に TTL が期限切れになりました。"
+            "192.0.2.1 からの応答: 転送中に TTL が期限切れになりました。"
           ] do
         assert Prober.parse_ping_time(output, @windows, "8.8.8.8") == {:error, "unreachable"},
                output
@@ -150,7 +150,7 @@ defmodule NexPinger.ProberTest do
 
     test "Unix: Time Exceeded is ttl expired" do
       for line <- [
-            "From 192.168.0.1 icmp_seq=1 Time to live exceeded",
+            "From 192.0.2.1 icmp_seq=1 Time to live exceeded",
             "From 2001:db8::1 icmp_seq=1 Time exceeded: Hop limit"
           ] do
         output = """
@@ -166,7 +166,7 @@ defmodule NexPinger.ProberTest do
 
     test "Unix: Destination Unreachable is unreachable" do
       for line <- [
-            "From 192.168.0.130 icmp_seq=1 Destination Host Unreachable",
+            "From 192.0.2.130 icmp_seq=1 Destination Host Unreachable",
             "From 2001:db8::1 icmp_seq=1 Destination unreachable: Address unreachable",
             "ping: connect: Network is unreachable",
             "ping: sendto: No route to host"
