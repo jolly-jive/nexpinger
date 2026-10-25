@@ -203,7 +203,7 @@ defmodule NexPinger.RunnerTest do
   test "keeps the result columns aligned when a MAC address is unavailable" do
     with_mac = %Host{
       name: "with-mac",
-      address: "192.168.0.1",
+      address: "192.0.2.1",
       items: [],
       mac_address: "00:00:5e:00:53:01"
     }
