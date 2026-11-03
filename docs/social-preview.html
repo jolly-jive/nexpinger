@@ -1,0 +1,55 @@
+<!doctype html>
+<!--
+  Source of the GitHub social preview (Settings > General > Social preview).
+  Render it at 1280x640 and upload the PNG, e.g. with Edge or Chrome:
+    msedge --headless=new --hide-scrollbars --force-device-scale-factor=1 --window-size=1280,640 --screenshot=social-preview.png docs/social-preview.html
+  Fonts: Segoe UI and Consolas (Windows).
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    background: #4B275F;
+    background-image: radial-gradient(circle at 88% 0%, #5E3477 0, transparent 55%);
+    color: #F3ECF8; font-family: "Segoe UI", sans-serif;
+    box-sizing: border-box; padding: 72px 80px; display: grid; grid-template-rows: auto 1fr; gap: 52px;
+  }
+  .top { display: flex; align-items: center; gap: 40px; }
+  .top svg { width: 168px; height: 168px; flex: none; filter: drop-shadow(0 6px 18px rgba(0,0,0,.25)); }
+  h1 { margin: 0; font-size: 104px; font-weight: 600; line-height: 1; letter-spacing: -0.01em; }
+  p { margin: 18px 0 0; font-size: 34px; color: #D9C8E6; }
+  .term {
+    background: #1A1220; border-radius: 16px; padding: 26px 32px;
+    font-family: Consolas, monospace; font-size: 21px; line-height: 1.6; color: #C9BBD4;
+    white-space: pre; align-self: end; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  }
+  .ok { color: #3FB950; } .ng { color: #F85149; } .dim { color: #8A7C96; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <svg viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="14" fill="#4B275F"/>
+      <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="#F3ECF8" stroke-opacity="0.18"/>
+      <clipPath id="clip"><rect width="64" height="64" rx="14"/></clipPath>
+      <polyline points="8,36 19,36 25,18 34,48 40,30 44,36 49,36" fill="none" stroke="#F3ECF8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <g fill="none" stroke="#3FB950" clip-path="url(#clip)">
+        <circle cx="55" cy="36" r="9.5" stroke-width="2.5" opacity="0.65"/>
+        <circle cx="55" cy="36" r="15" stroke-width="2" opacity="0.4"/>
+        <circle cx="55" cy="36" r="20.5" stroke-width="1.8" opacity="0.2"/>
+      </g>
+      <circle cx="55" cy="36" r="4.5" fill="#3FB950"/>
+    </svg>
+    <div>
+      <h1>NexPinger</h1>
+      <p>Keep pinging many hosts over ICMP / TCP / UDP</p>
+    </div>
+  </div>
+  <div class="term"><span class="dim">2026-09-16 12:00:00.123</span> 192.168.1.1  mac    ping  icmp    <span class="ok">ok</span>     1.23 ms  gateway
+<span class="dim">2026-09-16 12:00:01.456</span> 203.0.113.10 -      https 443/tcp <span class="ok">ok</span>    45.67 ms  web-server
+<span class="dim">2026-09-16 12:00:02.789</span> 192.168.1.10 no-mac ping  icmp    <span class="ng">NG timeout</span>      dns-server
+<span class="dim">2026-09-16 12:00:03.012</span> 192.168.1.10 mac    dns   53/udp  <span class="ok">ok</span>     2.34 ms  dns-server</div>
+</body>
+</html>
